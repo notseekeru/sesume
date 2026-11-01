@@ -9,7 +9,7 @@ One page, one column, every number traceable to a run.
 
 ## The gate
 
-`scripts/check.sh` compiles, then reports pages, page fill, the worst overfull
+`skills/resume/scripts/check.sh` compiles, then reports pages, page fill, the worst overfull
 box, bullets past two lines, and the bullets whose last line is a stub. It exits
 nonzero when the resume spills, a bullet runs three lines, or a box overflows
 more than 5pt.
@@ -96,7 +96,7 @@ translation. `Cut p95 on the OTLP histogram via pool trimming` does.
 1. Read `RESUME.latex` and the evidence behind the bullet being touched.
 2. Propose the exact before and after. Get one yes. Propose only the bullets the
    gate failed or the user named. A rewrite nobody asked for is a nitpick.
-3. Edit, then run `scripts/check.sh`.
+3. Edit, then run `skills/resume/scripts/check.sh`.
 4. Read the preview PNG and the `pdftotext` output.
 5. Report pages, fill, the worst box, the runts, and what was cut to pay for the
    change.
