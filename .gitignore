@@ -1,0 +1,7 @@
+.direnv/
+build/
+*.log
+.DS_Store
+
+/RESUME.latex
+/AGENTS.md
