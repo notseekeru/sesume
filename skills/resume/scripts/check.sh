@@ -74,15 +74,15 @@ pdftoppm -png -r "$DPI" "$PDF" "$OUT/preview/page" >/dev/null 2>&1
 
 fail=0
 row() { printf '%-10s %-30s %s\n' "$1" "$2" "$3"; }
-verdict() { if [ "$1" -eq 1 ]; then echo "FAIL"; fail=1; else echo "ok"; fi; }
 
 echo "$TEX"
-row pages "$pages/$MAX_PAGES" "$(verdict "$(awk -v p="$pages" -v m="$MAX_PAGES" 'BEGIN{print (p>m)}')")"
+if [ "$pages" -gt "$MAX_PAGES" ]; then pv=FAIL; fail=1; else pv=ok; fi
+row pages "$pages/$MAX_PAGES" "$pv"
 row fill "${fill}% (${slack}in slack)" "ok"
-row overfull "${overfull}pt (max ${MAX_OVERFULL_PT}pt)" \
-  "$(verdict "$(awk -v o="$overfull" -v m="$MAX_OVERFULL_PT" 'BEGIN{print (o>m)}')")"
-row bullets "$bullets, $longn over $MAX_BULLET_LINES lines" \
-  "$(verdict "$(awk -v l="$longn" 'BEGIN{print (l>0)}')")"
+if awk -v o="$overfull" -v m="$MAX_OVERFULL_PT" 'BEGIN{exit !(o>m)}'; then ov=FAIL; fail=1; else ov=ok; fi
+row overfull "${overfull}pt (max ${MAX_OVERFULL_PT}pt)" "$ov"
+if [ "$longn" -gt 0 ]; then bv=FAIL; fail=1; else bv=ok; fi
+row bullets "$bullets, $longn over $MAX_BULLET_LINES lines" "$bv"
 row runt "$runtn under ${RUNT_FRACTION} last line" "trim"
 row preview "$OUT/preview/page-1.png" "look"
 echo "$blocks" | tail -n +2
