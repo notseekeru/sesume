@@ -5,18 +5,18 @@ gate that keeps it to one page instead of shrinking margins until it fits.
 
 ## What is here
 
-| Path | What it is |
-| --- | --- |
-| `RESUME.template.latex` | starter file: placeholder identity and example projects |
-| `skills/resume/SKILL.md` | layout, typography and bullet rules |
-| `skills/resume/scripts/check.sh` | compile and measure gate |
-| `scripts/pi-history.sh` | pi session transcript, projected down to prose |
-| `scripts/port-claimer.sh` | frees a port from another compose project before `make up` |
-| `backend/` | Hono API under `/api`, pg pool |
-| `frontend/` | Vite + React shell, dev server proxies `/api` to the backend |
-| `compose.yml` | backend, frontend and postgres |
-| `flake.nix` | dev shell for the gate and the web shell |
-| `.pi/` | playwright MCP over the dev stack, plus repo-local skills |
+| Path                             | What it is                                                   |
+| -------------------------------- | ------------------------------------------------------------ |
+| `RESUME.template.latex`          | starter file: placeholder identity and example projects      |
+| `skills/resume/SKILL.md`         | layout, typography and bullet rules                          |
+| `skills/resume/scripts/check.sh` | compile and measure gate                                     |
+| `scripts/pi-history.sh`          | pi session transcript, projected down to prose               |
+| `scripts/port-claimer.sh`        | frees a port from another compose project before `make up`   |
+| `backend/`                       | Hono API under `/api`, pg pool                               |
+| `frontend/`                      | Vite + React shell, dev server proxies `/api` to the backend |
+| `compose.yml`                    | backend, frontend and postgres                               |
+| `flake.nix`                      | dev shell for the gate and the web shell                     |
+| `.pi/`                           | playwright MCP over the dev stack, plus repo-local skills    |
 
 `RESUME.latex` is in `.gitignore`: your real one stays on your machine.
 

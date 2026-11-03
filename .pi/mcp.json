@@ -8,6 +8,9 @@
         "--browser",
         "chromium"
       ]
+    },
+    "neon": {
+      "url": "https://mcp.neon.tech/mcp"
     }
   }
 }
