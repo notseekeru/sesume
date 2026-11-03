@@ -1,0 +1,51 @@
+services:
+  frontend:
+    build: ./frontend
+    container_name: sesume_frontend
+    depends_on:
+      - backend
+    networks:
+      - app
+    restart: unless-stopped
+
+  backend:
+    build: ./backend
+    container_name: sesume_backend
+    environment:
+      PORT: 4100
+      DATABASE_URL: postgresql://${POSTGRES_USER:-sesume}:${POSTGRES_PASSWORD:-sesume}@postgres:5432/${POSTGRES_DB:-sesume}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - app
+      - db
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:18-alpine@sha256:10a5c69a83035ab5239f5620d708520e8b28f5aa1f2b20143e6024532edadfb5
+    container_name: sesume_postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-sesume}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sesume}
+      POSTGRES_DB: ${POSTGRES_DB:-sesume}
+    # PG18+ stores data in a versioned subdirectory: mount the parent, not a data dir.
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-sesume} -d ${POSTGRES_DB:-sesume}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    networks:
+      - db
+    restart: unless-stopped
+
+networks:
+  app:
+  db:
+    internal: true
+
+volumes:
+  postgres_data:

@@ -1,8 +1,13 @@
 name: gate
 
 on:
-  push:
   pull_request:
+    paths:
+      - "RESUME.template.latex"
+      - "skills/resume/**"
+      - "flake.nix"
+      - "flake.lock"
+      - ".github/workflows/gate.yml"
 
 jobs:
   gate:

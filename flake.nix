@@ -29,6 +29,8 @@
                 ]
               ))
               pkgs.poppler-utils
+              pkgs.nodejs_24
+              pkgs.playwright-mcp
             ];
           };
         }
