@@ -1,4 +1,4 @@
-.PHONY: exec lint check-ports up build buildcache down clean logs ps shell psql migrate rollback new-migration
+.PHONY: exec lint test check-ports up build buildcache down clean logs ps shell psql migrate rollback new-migration
 
 DEV_CMD      = docker compose -p sesume-dev -f compose.yml -f compose.dev.yml
 DEV_PROJECT  = sesume-dev
@@ -15,6 +15,9 @@ exec:
 lint:
 	docker exec -t $(FRONTEND_DEV) sh -c "npm run lint"
 	docker exec -t $(BACKEND_DEV) sh -c "npm run lint"
+
+test:
+	docker exec -t $(BACKEND_DEV) sh -c "npm test"
 
 check-ports:
 	@scripts/port-claimer.sh --self $(DEV_PROJECT) $(PORTS)
