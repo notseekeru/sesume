@@ -40,7 +40,7 @@ export function ReviewPanel({ review, busy, error, dirty, saved, provider, onPro
             {error && <p className="alert">{error}</p>}
 
             {review === null ? (
-                <p className="hint pad">No review yet. One review grades the page against every band, names the sections and writes the edits that raise it.</p>
+                <p className="hint pad">No review yet. One review grades the page against every band and writes the edits that raise it.</p>
             ) : (
                 <>
                     {review.stale && <p className="hint">Read the version before your last save. Re-review to match the page.</p>}
