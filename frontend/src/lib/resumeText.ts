@@ -34,6 +34,24 @@ export function lineOf(text: string, quote: string): number | null {
     return locate(text.split("\n").map(flatten), quote)?.from ?? null;
 }
 
+export type LineCall = "weak" | "safe" | "strong";
+
+export interface QuotedLine {
+    text: string;
+    call: LineCall;
+}
+
+export function callByLine(text: string, quotes: QuotedLine[]): Map<number, LineCall> {
+    const flat = text.split("\n").map(flatten);
+    const calls = new Map<number, LineCall>();
+    for (const quote of quotes) {
+        const span = locate(flat, quote.text);
+        if (!span) continue;
+        for (let index = span.from; index <= span.to; index += 1) calls.set(index, quote.call);
+    }
+    return calls;
+}
+
 export function offsetOf(text: string, quote: string): number | null {
     const line = lineOf(text, quote);
     if (line === null) return null;

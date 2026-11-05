@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ApiError, compileLatex, createResume, deleteResume, extractResume, getResume, getResumeReview, listResumes, loadProvider, type Provider, type ResumeReview, type ResumeSummary, type ReviewLevel, retryRewrite, reviewResume, saveProvider, updateResume } from "../lib/api";
-import { lineOf, offsetOf, replaceLine } from "../lib/resumeText";
+import { CodeEditor } from "../components/CodeEditor";
+import { ReviewPanel } from "../components/ReviewPanel";
+import { ApiError, compileLatex, createResume, deleteResume, extractResume, getResume, getResumeReview, listResumes, loadProvider, type Provider, type ResumeReview, type ResumeSummary, retryRewrite, reviewResume, saveProvider, updateResume } from "../lib/api";
+import { isLatex } from "../lib/latex";
+import { replaceLine } from "../lib/resumeText";
 import { toLatex } from "../lib/toLatex";
 
 interface Draft {
@@ -13,9 +16,6 @@ const EMPTY: Draft = { id: null, name: "", text: "" };
 const BURST_MS = 700;
 const MAX_UNDO = 30;
 const DEBOUNCE_MS = 900;
-
-const LEVEL_LABEL: Record<string, string> = { intern: "Intern", junior: "Junior", mid: "Mid-level", senior: "Senior", staff: "Staff", principal: "Principal" };
-const CALL_LABEL: Record<string, string> = { passes: "Passes", close: "Close", fails: "Fails" };
 
 interface UndoStep {
     text: string;
@@ -36,15 +36,16 @@ export default function ResumePage() {
     const [reviewError, setReviewError] = useState<string | null>(null);
     const [importing, setImporting] = useState(false);
     const [pasting, setPasting] = useState(false);
+    const [dropping, setDropping] = useState(false);
+    const [focus, setFocus] = useState<{ quote: string; n: number } | null>(null);
+    const [tab, setTab] = useState<"pdf" | "review">("review");
     const [provider, setProvider] = useState<Provider>(() => loadProvider());
-    const area = useRef<HTMLTextAreaElement>(null);
     const burst = useRef(0);
 
     const editing = draft.id !== null || pasting || importing;
     const active = rows.find((row) => row.id === draft.id);
     const dirty = draft.id === null ? Boolean(draft.name.trim() || draft.text.trim()) : active !== undefined && (active.name !== draft.name || active.chars !== [...draft.text].length);
-    const latex = draft.text.includes("\\documentclass");
-    const suggestions = (review?.rewrites ?? []).filter((line) => !finished.has(line.source));
+    const latex = isLatex(draft.text);
 
     const resetHistory = useCallback(() => {
         setPast([]);
@@ -123,7 +124,7 @@ export default function ResumePage() {
     useEffect(() => {
         function key(event: KeyboardEvent) {
             if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== "z") return;
-            if (!editing) return;
+            if (!editing || (event.target as HTMLElement | null)?.tagName === "INPUT") return;
             event.preventDefault();
             if (event.shiftKey) redo();
             else undo();
@@ -274,12 +275,7 @@ export default function ResumePage() {
     }
 
     function focusLine(quote: string) {
-        const at = offsetOf(draft.text, quote);
-        const line = lineOf(draft.text, quote);
-        if (at === null || line === null || !area.current) return;
-        area.current.focus();
-        area.current.setSelectionRange(at, at + quote.length);
-        area.current.scrollTop = Math.max(0, (line - 3) * 18);
+        setFocus((current) => ({ quote, n: (current?.n ?? 0) + 1 }));
     }
 
     function updateProvider(next: Provider) {
@@ -288,233 +284,145 @@ export default function ResumePage() {
     }
 
     return (
-        <main className="editor">
-            <header className="editor-head">
-                <h1>Resume</h1>
-                <p className="hint">Single account, no login: every resume here is stored unencrypted in this deployment's database.</p>
-            </header>
-
-            {error && <p className="alert">{error}</p>}
-            {notice && !error && <p className="note">{notice}</p>}
-
-            {!editing && (
-                <label className="dropzone">
-                    <span>{busy ? "Reading the PDF..." : "Drop a PDF here, or click to browse"}</span>
-                    <input
-                        type="file"
-                        accept="application/pdf,.pdf"
-                        disabled={busy}
-                        hidden
-                        onChange={(event) => {
-                            const file = event.target.files?.[0];
-                            event.target.value = "";
-                            void pick(file);
-                        }}
-                    />
-                    <button
-                        type="button"
-                        className="link"
-                        disabled={busy}
-                        onClick={(event) => {
-                            event.preventDefault();
-                            setPasting(true);
-                        }}
-                    >
-                        Paste resume instead
-                    </button>
-                </label>
-            )}
-
-            {editing && (
-                <section className="card">
-                    <div className="chips">
-                        {rows.map((row) => (
-                            <button key={row.id} type="button" className={row.id === draft.id ? "chip on" : "chip"} onClick={() => void open(row.id)}>
-                                {row.name}
-                                <span className="chip-meta">{row.chars.toLocaleString()} chars</span>
-                            </button>
-                        ))}
-                        {draft.id && (
-                            <button type="button" className="chip new" onClick={startNew}>
-                                + New
-                            </button>
-                        )}
-                    </div>
-
-                    <label className="field">
-                        <span>Name</span>
-                        <input value={draft.name} maxLength={80} placeholder="Title" onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} />
-                    </label>
-
-                    <div className="field-head">
-                        <span>Resume text</span>
-                        <span className="hint">
-                            {dirty && (draft.id ? "Unsaved changes" : "Not saved")}
-                            {!latex && draft.text.trim() !== "" && (
-                                <button type="button" className="link" onClick={convertToLatex}>
-                                    Convert to LaTeX
-                                </button>
-                            )}
-                        </span>
-                    </div>
-                    <textarea ref={area} className="text" value={draft.text} placeholder="Paste your resume here..." onChange={(event) => editText(event.target.value)} />
-
-                    <div className="actions">
-                        <button type="button" className="primary" disabled={busy || !dirty} onClick={() => void save()}>
-                            {busy ? "Saving..." : draft.id ? "Save" : "Save resume"}
+        <div className="studio">
+            <header className="bar">
+                <span className="brand">sesume</span>
+                <div className="chips">
+                    {rows.map((row) => (
+                        <button key={row.id} type="button" className={row.id === draft.id ? "chip on" : "chip"} onClick={() => void open(row.id)}>
+                            {row.name}
                         </button>
-                        <button type="button" disabled={busy || past.length === 0} onClick={undo}>
-                            Undo
+                    ))}
+                    {draft.id && (
+                        <button type="button" className="chip new" onClick={startNew}>
+                            + New
                         </button>
-                        <button type="button" disabled={busy || future.length === 0} onClick={redo}>
-                            Redo
+                    )}
+                </div>
+                <span className="state">{dirty ? (draft.id ? "Unsaved changes" : "Not saved") : draft.id ? "Saved" : ""}</span>
+                <div className="actions end">
+                    {draft.id ? (
+                        <button type="button" disabled={busy} onClick={() => void remove()}>
+                            Delete
                         </button>
-                        {draft.id ? (
-                            <button type="button" disabled={busy} onClick={() => void remove()}>
-                                Delete
-                            </button>
-                        ) : (
+                    ) : (
+                        editing && (
                             <button type="button" disabled={busy} onClick={discard}>
                                 {dirty ? "Discard" : "Cancel"}
                             </button>
-                        )}
-                    </div>
-                </section>
-            )}
+                        )
+                    )}
+                    <button type="button" className="primary" disabled={busy || !dirty} onClick={() => void save()}>
+                        {busy ? "Saving..." : "Save"}
+                    </button>
+                </div>
+            </header>
 
-            {draft.id && !importing && (
-                <div className={latex ? "panes two" : "panes"}>
-                    <section className="card">
-                        <details className="provider">
-                            <summary>Reviewer provider</summary>
-                            <p className="hint">Sent with each review request. The key stays in this browser tab.</p>
-                            <input placeholder="Base URL, e.g. https://api.openai.com/v1" value={provider.baseUrl} onChange={(event) => updateProvider({ ...provider, baseUrl: event.target.value })} />
-                            <input placeholder="Model" value={provider.model} onChange={(event) => updateProvider({ ...provider, model: event.target.value })} />
-                            <input type="password" placeholder="API key" value={provider.key} onChange={(event) => updateProvider({ ...provider, key: event.target.value })} />
-                        </details>
+            {(error || notice) && <div className="banner">{error ? <p className="alert">{error}</p> : <p className="note">{notice}</p>}</div>}
 
-                        <div className="actions spread">
-                            <h2>Review</h2>
-                            {review && <span className="badge">{review.reads_at ? LEVEL_LABEL[review.reads_at] : "No band yet"}</span>}
-                        </div>
-                        <div className="actions">
-                            <button type="button" className="primary" disabled={busy || dirty || reviewing || draft.id === null} onClick={() => void reviewCurrent()}>
-                                {reviewing ? "Reviewing..." : review ? "Re-review" : "Review resume"}
-                            </button>
-                            {dirty && <span className="hint">Save before reviewing: the reviewer reads the saved text.</span>}
-                        </div>
-                        {reviewError && <p className="alert">{reviewError}</p>}
-
-                        {review && (
-                            <>
-                                {review.stale && <p className="hint">Read the version before your last save. Re-review to match the page.</p>}
-                                <p className="verdict">{review.verdict}</p>
-                                <Ladder key={review.created_at} review={review} />
-                                <h3>Rewrites</h3>
-                                {suggestions.length === 0 && <p className="hint">No rewrites open. A re-review writes them again.</p>}
-                                <ul className="edits">
-                                    {suggestions.map((line) => (
-                                        <li key={line.source}>
-                                            <p className="was">{line.source}</p>
-                                            <p className="now">{line.rewrite}</p>
-                                            <div className="actions">
-                                                <button
-                                                    type="button"
-                                                    disabled={busy}
-                                                    onClick={() => {
-                                                        if (applyRewrite(line.source, line.rewrite)) finish(line.source, true);
-                                                    }}
-                                                >
-                                                    Apply
-                                                </button>
-                                                <button type="button" disabled={busy || review.stale} onClick={() => void retryEdit(line.source)}>
-                                                    Retry
-                                                </button>
-                                                <button type="button" onClick={() => finish(line.source, true)}>
-                                                    Dismiss
-                                                </button>
-                                            </div>
-                                        </li>
-                                    ))}
-                                </ul>
-                                {review.lines.length > 0 && (
-                                    <>
-                                        <h3>Bullets</h3>
-                                        <ul className="audits">
-                                            {review.lines.map((line) => (
-                                                <li key={`${line.call}:${line.text}`}>
-                                                    <button type="button" onClick={() => focusLine(line.text)}>
-                                                        <span className={`mark ${line.call}`}>{line.call}</span>
-                                                        {line.text}
-                                                    </button>
-                                                </li>
-                                            ))}
-                                        </ul>
-                                    </>
+            {editing ? (
+                <div className="panes">
+                    <section className="pane">
+                        <div className="pane-bar">
+                            <input className="name" value={draft.name} maxLength={80} placeholder="Resume name" aria-label="Resume name" onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} />
+                            <div className="actions">
+                                {!latex && draft.text.trim() !== "" && (
+                                    <button type="button" className="link" onClick={convertToLatex}>
+                                        Convert to LaTeX
+                                    </button>
                                 )}
-                            </>
-                        )}
+                                <button type="button" disabled={busy || past.length === 0} onClick={undo}>
+                                    Undo
+                                </button>
+                                <button type="button" disabled={busy || future.length === 0} onClick={redo}>
+                                    Redo
+                                </button>
+                            </div>
+                        </div>
+                        <CodeEditor value={draft.text} latex={latex} marks={review?.lines ?? []} focus={focus} placeholder="Paste your resume here..." onChange={editText} />
                     </section>
 
-                    {latex && draft.id && <Preview text={draft.text} />}
-                </div>
-            )}
-        </main>
-    );
-}
-
-function Ladder({ review }: { review: ResumeReview }) {
-    const [focus, setFocus] = useState<string | null>(null);
-    const [all, setAll] = useState(false);
-    const active = focus ?? review.reads_at ?? review.levels[0]?.level ?? null;
-    const focused = review.levels.find((level) => level.level === active) ?? null;
-
-    return (
-        <>
-            <div className="levels">
-                {review.levels.map((level) => (
-                    <button
-                        key={level.level}
-                        type="button"
-                        aria-pressed={!all && level.level === active}
-                        aria-label={`${LEVEL_LABEL[level.level] ?? level.level}: ${CALL_LABEL[level.call] ?? level.call}`}
-                        className={!all && level.level === active ? `level ${level.call} on` : `level ${level.call}`}
-                        onClick={() => {
-                            setAll(false);
-                            setFocus(level.level);
-                        }}
-                    >
-                        {LEVEL_LABEL[level.level] ?? level.level}
-                        <em>{CALL_LABEL[level.call] ?? level.call}</em>
-                    </button>
-                ))}
-                <button type="button" className="link" onClick={() => setAll((value) => !value)}>
-                    {all ? "One level" : "All levels"}
-                </button>
-            </div>
-            {all ? (
-                <div className="rungs">
-                    {review.levels.map((level) => (
-                        <Rung key={level.level} level={level} />
-                    ))}
+                    <section className="pane side">
+                        <div className="pane-bar tabs">
+                            <button type="button" className={tab === "pdf" ? "tab on" : "tab"} onClick={() => setTab("pdf")}>
+                                PDF
+                            </button>
+                            <button type="button" className={tab === "review" ? "tab on" : "tab"} onClick={() => setTab("review")}>
+                                Review
+                            </button>
+                        </div>
+                        <div className={tab === "pdf" ? "pane-body fill" : "pane-body"}>
+                            {tab === "pdf" ? (
+                                latex ? (
+                                    <Preview text={draft.text} />
+                                ) : (
+                                    <p className="hint pad">Convert the text to LaTeX to see the preview.</p>
+                                )
+                            ) : (
+                                <ReviewPanel
+                                    review={review}
+                                    busy={reviewing}
+                                    error={reviewError}
+                                    dirty={dirty}
+                                    saved={draft.id !== null}
+                                    provider={provider}
+                                    onProvider={updateProvider}
+                                    onReview={() => void reviewCurrent()}
+                                    onApply={applyRewrite}
+                                    onRetry={(source) => void retryEdit(source)}
+                                    onDismiss={(source) => finish(source, true)}
+                                    onFocusLine={focusLine}
+                                    finished={finished}
+                                />
+                            )}
+                        </div>
+                    </section>
                 </div>
             ) : (
-                focused && <Rung level={focused} />
+                <main className="welcome">
+                    <label
+                        className={dropping ? "dropzone dropping" : "dropzone"}
+                        onDragOver={(event) => {
+                            event.preventDefault();
+                            setDropping(true);
+                        }}
+                        onDragLeave={(event) => {
+                            if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDropping(false);
+                        }}
+                        onDrop={(event) => {
+                            event.preventDefault();
+                            setDropping(false);
+                            void pick(event.dataTransfer.files?.[0]);
+                        }}
+                    >
+                        <span className="dropzone-title">{dropping ? "Drop it" : busy ? "Reading the PDF..." : "Drop a PDF here, or click to browse"}</span>
+                        <input
+                            type="file"
+                            accept="application/pdf,.pdf"
+                            disabled={busy}
+                            hidden
+                            onChange={(event) => {
+                                const file = event.target.files?.[0];
+                                event.target.value = "";
+                                void pick(file);
+                            }}
+                        />
+                        <button
+                            type="button"
+                            className="link"
+                            disabled={busy}
+                            onClick={(event) => {
+                                event.preventDefault();
+                                setPasting(true);
+                            }}
+                        >
+                            Paste resume instead
+                        </button>
+                    </label>
+                    <p className="hint pad">Single account, no login: every resume here is stored unencrypted in this deployment's database.</p>
+                </main>
             )}
-        </>
-    );
-}
-
-function Rung({ level }: { level: ReviewLevel }) {
-    return (
-        <article className="rung">
-            <header>
-                <strong>{LEVEL_LABEL[level.level] ?? level.level}</strong>
-                <span className={`level ${level.call}`}>{CALL_LABEL[level.call] ?? level.call}</span>
-            </header>
-            <p>{level.thinks}</p>
-            {level.move && <p className="move">{level.move}</p>}
-        </article>
+        </div>
     );
 }
 
@@ -556,12 +464,16 @@ function Preview({ text }: { text: string }) {
     );
 
     return (
-        <section className="card">
+        <div className="preview">
             <div className="actions spread">
-                <h2>Preview</h2>
                 <span className="hint">{busy ? "Compiling..." : error ? "Does not compile" : url ? "PDF" : "Waiting"}</span>
+                {url && !error && (
+                    <a className="link" href={url} target="_blank" rel="noreferrer">
+                        Open
+                    </a>
+                )}
             </div>
             {error ? <pre className="log">{error}</pre> : url ? <iframe className="pdf" src={url} title="Resume preview" /> : null}
-        </section>
+        </div>
     );
 }

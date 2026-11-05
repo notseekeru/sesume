@@ -93,7 +93,7 @@ export interface ReviewRewrite {
 
 export interface ReviewLine {
     text: string;
-    call: string;
+    call: "weak" | "safe" | "strong";
 }
 
 export interface ResumeReview {
