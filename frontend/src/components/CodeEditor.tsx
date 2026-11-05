@@ -1,7 +1,10 @@
-import { type MouseEvent, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, type MouseEvent, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { tokenize } from "../lib/latex";
 import { callByLine, type LineCall, lineOf, type Suggestion } from "../lib/resumeText";
 
+// AI HERE: no soft wrap, so one source line is one visual row and the gutter, hover line and ghost card
+// all compute from the index. Ceiling: a long line needs horizontal scrolling. Upgrade path: measure
+// the layer's line boxes instead.
 const LINE_HEIGHT = 20;
 const PAD_TOP = 12;
 
@@ -76,8 +79,15 @@ export function CodeEditor({ value, latex, marks, suggestions, ghost, focus, pla
         return Math.max(0, Math.min(rows.length - 1, Math.floor(offset / LINE_HEIGHT)));
     }
 
+    useLayoutEffect(() => {
+        if (!import.meta.env.DEV) return;
+        const node = area.current;
+        const pre = layer.current;
+        if (node && pre && Math.abs(node.scrollHeight - pre.scrollHeight) > 1) console.warn(`editor layers disagree: textarea ${node.scrollHeight}, layer ${pre.scrollHeight}`);
+    });
+
     return (
-        <div className="editor">
+        <div className="editor" style={{ "--line-height": `${LINE_HEIGHT}px`, "--pad-top": `${PAD_TOP}px` } as CSSProperties}>
             <div className="gutter" aria-hidden>
                 <div ref={gutter} className="gutter-inner">
                     {rows.map((row, index) => {
@@ -123,7 +133,7 @@ export function CodeEditor({ value, latex, marks, suggestions, ghost, focus, pla
                 aria-label="Resume source"
             />
             {shown && shownLine !== null && (
-                <div className="ghost" style={{ top: `calc(${PAD_TOP + (shownLine + 1) * LINE_HEIGHT}px - var(--scroll, 0px))` }}>
+                <div className="ghost" aria-hidden style={{ top: `calc(var(--pad-top) + ${shownLine + 1} * var(--line-height) - var(--scroll, 0px))` }}>
                     <p className="ghost-title">Suggested rewrite</p>
                     <p>{shown.rewrite}</p>
                 </div>

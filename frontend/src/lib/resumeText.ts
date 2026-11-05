@@ -57,15 +57,6 @@ export function callByLine(text: string, quotes: QuotedLine[]): Map<number, Line
     return calls;
 }
 
-export function offsetOf(text: string, quote: string): number | null {
-    const line = lineOf(text, quote);
-    if (line === null) return null;
-    return text
-        .split("\n")
-        .slice(0, line)
-        .reduce((offset, value) => offset + value.length + 1, 0);
-}
-
 export function replaceLine(text: string, source: string, rewrite: string): string | null {
     const lines = text.split("\n");
     const span = locate(lines.map(flatten), source);
@@ -77,6 +68,6 @@ export function replaceLine(text: string, source: string, rewrite: string): stri
 if (import.meta.env.DEV) {
     const resume = "ALEX\n• Built the thing\n• Cut p95 20%";
     const replaced = replaceLine(resume, "BUILT  THE THING", "Built the thing that shipped");
-    const offsets = [offsetOf(resume, "Cut p95 20%"), lineOf(resume, "Cut p95 20%")];
-    if (replaced !== "ALEX\nBuilt the thing that shipped\n• Cut p95 20%" || offsets[0] !== 23 || offsets[1] !== 2) console.error("resumeText: self-check failed");
+    const line = lineOf(resume, "Cut p95 20%");
+    if (replaced !== "ALEX\nBuilt the thing that shipped\n• Cut p95 20%" || line !== 2) console.error("resumeText: self-check failed");
 }
