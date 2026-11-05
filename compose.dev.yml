@@ -1,0 +1,30 @@
+services:
+  frontend:
+    container_name: sesume_frontend_dev
+    build:
+      context: ./frontend
+      target: dev
+    ports:
+      - "${FRONTEND_PORT:-5373}:5373"
+    environment:
+      DEVELOPMENT_BACKEND_URL: http://backend:4100
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+
+  backend:
+    container_name: sesume_backend_dev
+    build:
+      context: ./backend
+      target: dev
+    ports:
+      - "${BACKEND_PORT:-4100}:4100"
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+
+  postgres:
+    ports:
+      - "${POSTGRES_PORT:-5433}:5432"

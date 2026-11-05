@@ -1,8 +1,13 @@
 .direnv/
 build/
+dist/
+node_modules/
 *.log
 .DS_Store
 notes.md
+.env
+.env.local
+.playwright-mcp/
 
 /RESUME.latex
 /AGENTS.md

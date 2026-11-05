@@ -5,13 +5,18 @@ gate that keeps it to one page instead of shrinking margins until it fits.
 
 ## What is here
 
-| Path | What it is |
-| --- | --- |
-| `RESUME.template.latex` | starter file: placeholder identity and example projects |
-| `skills/resume/SKILL.md` | layout, typography and bullet rules |
-| `skills/resume/scripts/check.sh` | compile and measure gate |
-| `scripts/pi-history.sh` | pi session transcript, projected down to prose |
-| `flake.nix` | texlive and poppler for the gate |
+| Path                             | What it is                                                   |
+| -------------------------------- | ------------------------------------------------------------ |
+| `RESUME.template.latex`          | starter file: placeholder identity and example projects      |
+| `skills/resume/SKILL.md`         | layout, typography and bullet rules                          |
+| `skills/resume/scripts/check.sh` | compile and measure gate                                     |
+| `scripts/pi-history.sh`          | pi session transcript, projected down to prose               |
+| `scripts/port-claimer.sh`        | frees a port from another compose project before `make up`   |
+| `backend/`                       | Hono API under `/api`, pg pool                               |
+| `frontend/`                      | Vite + React shell, dev server proxies `/api` to the backend |
+| `compose.yml`                    | backend, frontend and postgres                               |
+| `flake.nix`                      | dev shell for the gate and the web shell                     |
+| `.pi/`                           | playwright MCP over the dev stack, plus repo-local skills    |
 
 `RESUME.latex` is in `.gitignore`: your real one stays on your machine.
 
@@ -65,6 +70,26 @@ mkdir -p ~/.pi/agent/skills/resume
 ln -sf "$PWD/skills/resume/SKILL.md" ~/.pi/agent/skills/resume/SKILL.md
 ln -sfn "$PWD/skills/resume/scripts" ~/.pi/agent/skills/resume/scripts
 ```
+
+## Web shell
+
+```bash
+make build
+make up     # postgres, backend on 4100, frontend on 5373
+```
+
+Ports and database credentials default to 5373, 4100, 5433 and `sesume`; copy
+`.env.example` to `.env` to change them. `make up` frees those ports first,
+stopping whichever compose project holds them. `make psql` opens the dev
+database. `make clean` deletes that database's volume. The target list is in
+the `Makefile`, the services in `compose.yml`.
+
+To run outside Docker, `nix develop`, then `npm ci && npm run dev` in
+`backend/` and `frontend/`. The backend reads `DATABASE_URL` from
+`backend/.env`, which points at the port `make up` publishes.
+
+Run `lint` through `make lint`: biome's prebuilt binary wants an FHS loader
+that NixOS does not provide.
 
 ## License
 
