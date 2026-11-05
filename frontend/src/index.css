@@ -500,10 +500,6 @@ h3 {
     white-space: nowrap;
 }
 
-.state .dot {
-    color: var(--ink);
-}
-
 .columns {
     display: flex;
     align-items: stretch;
@@ -594,6 +590,16 @@ body.resizing {
     flex: none;
     margin-left: auto;
     flex-wrap: nowrap;
+}
+
+.save {
+    min-width: 5.5rem;
+    justify-content: center;
+}
+
+.discard {
+    min-width: 5.2rem;
+    justify-content: center;
 }
 
 .pane-body {
@@ -1150,6 +1156,7 @@ h1 {
         grid-area: 1 / 2;
         justify-self: end;
         justify-content: flex-end;
+        width: max-content;
         flex-wrap: nowrap;
     }
 
@@ -1160,11 +1167,6 @@ h1 {
     .masthead .seg {
         grid-area: 3 / 1 / 4 / 2;
         justify-self: start;
-    }
-
-    .masthead .state {
-        grid-area: 3 / 2 / 4 / 3;
-        justify-self: end;
     }
 
     .splitter {
@@ -1200,30 +1202,10 @@ h1 {
     }
 }
 
-@media (max-width: 520px) {
-    .btn {
-        padding: 5px 8px;
-    }
-}
-
-@media (max-width: 380px) {
-    .theme {
-        min-width: 30px;
-        justify-content: center;
-        padding: 5px 7px;
-    }
-
-    .theme-label {
-        display: none;
-    }
-
-    .masthead .state {
-        grid-area: 4 / 1 / 5 / 3;
-        justify-self: start;
-    }
-
+@media (max-width: 1000px) {
     .pane-bar {
         height: auto;
+        min-height: 44px;
         flex-wrap: wrap;
     }
 
@@ -1235,6 +1217,29 @@ h1 {
         flex: 1 1 100%;
         justify-content: flex-end;
         margin-left: 0;
+    }
+}
+
+@media (max-width: 520px) {
+    .btn {
+        padding: 5px 8px;
+    }
+
+    .theme {
+        min-width: 30px;
+        justify-content: center;
+        padding: 5px 7px;
+    }
+
+    .theme-label {
+        display: none;
+    }
+}
+
+@media (max-width: 380px) {
+    .masthead .actions {
+        width: auto;
+        flex-wrap: wrap;
     }
 }
 

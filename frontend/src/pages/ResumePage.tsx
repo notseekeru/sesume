@@ -39,6 +39,30 @@ const DEFAULT_LAYOUT: Layout = {
 
 const COMPACT_QUERY = "(max-width: 900px)";
 
+type ShortcutEvent = { metaKey: boolean; ctrlKey: boolean; key: string; shiftKey: boolean };
+type ShortcutIntent = { action: "save" | "undo" | "redo" | null; prevent: boolean };
+
+function shortcut(event: ShortcutEvent, editing: boolean, dirty: boolean, busy: boolean): ShortcutIntent {
+    if (!(event.metaKey || event.ctrlKey)) return { action: null, prevent: false };
+    const pressed = event.key.toLowerCase();
+    if (pressed === "s") return { action: editing && dirty && !busy ? "save" : null, prevent: editing };
+    if (!editing || pressed !== "z") return { action: null, prevent: false };
+    return { action: event.shiftKey ? "redo" : "undo", prevent: true };
+}
+
+if (import.meta.env.DEV) {
+    const press = (init: Partial<ShortcutEvent>): ShortcutEvent => ({ metaKey: false, ctrlKey: false, key: "", shiftKey: false, ...init });
+    const checks = [
+        shortcut(press({ ctrlKey: true, key: "s" }), true, true, false).action === "save",
+        shortcut(press({ metaKey: true, key: "s" }), true, false, false).action === null,
+        shortcut(press({ ctrlKey: true, key: "s" }), true, false, false).prevent,
+        shortcut(press({ ctrlKey: true, key: "z" }), true, false, false).action === "undo",
+        shortcut(press({ ctrlKey: true, key: "Z", shiftKey: true }), true, false, false).action === "redo",
+        shortcut(press({ ctrlKey: true, key: "z" }), false, false, false).prevent === false,
+    ];
+    if (checks.includes(false)) console.error("shortcuts: self-check failed");
+}
+
 interface UndoStep {
     text: string;
     source?: string;
@@ -250,11 +274,13 @@ export default function ResumePage() {
 
     useEffect(() => {
         function key(event: KeyboardEvent) {
-            if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== "z") return;
-            if (!editing || (event.target as HTMLElement | null)?.tagName === "INPUT") return;
+            const { action, prevent } = shortcut(event, editing, dirty, busy);
+            if (!prevent) return;
+            if ((action === "undo" || action === "redo") && (event.target as HTMLElement | null)?.tagName === "INPUT") return;
             event.preventDefault();
-            if (event.shiftKey) redo();
-            else undo();
+            if (action === "save") void save();
+            else if (action === "redo") redo();
+            else if (action === "undo") undo();
         }
         window.addEventListener("keydown", key);
         return () => window.removeEventListener("keydown", key);
@@ -299,7 +325,7 @@ export default function ResumePage() {
             setSaved({ name: saved.name, text: saved.text });
             setPasting(false);
             setImporting(false);
-            setNotice("Saved.");
+            setNotice(null);
             if (draft.id) await loadReview(saved.id);
         } catch (problem) {
             setError(problem instanceof ApiError ? problem.message : "Could not save this resume.");
@@ -446,12 +472,6 @@ export default function ResumePage() {
                         })}
                     </fieldset>
                 )}
-                {editing && dirty && (
-                    <span className="state" aria-live="polite">
-                        <span className="dot" aria-hidden />
-                        {draft.id ? "Unsaved changes" : "Not saved"}
-                    </span>
-                )}
                 <div className="actions">
                     <ThemeToggle />
                     {draft.id ? (
@@ -460,14 +480,16 @@ export default function ResumePage() {
                         </button>
                     ) : (
                         editing && (
-                            <button type="button" className="btn" disabled={busy} onClick={discard}>
+                            <button type="button" className="btn discard" disabled={busy} onClick={discard}>
                                 {dirty ? "Discard" : "Cancel"}
                             </button>
                         )
                     )}
-                    <button type="button" className="btn primary" disabled={busy || !dirty} onClick={() => void save()}>
-                        {busy ? "Saving..." : "Save"}
-                    </button>
+                    {!visible.includes("editor") && editing && (
+                        <button type="button" className="btn primary save" disabled={busy || !dirty} title="Save (Ctrl/Cmd+S)" aria-keyshortcuts="Control+S Meta+S" onClick={() => void save()}>
+                            {busy ? "Saving..." : "Save"}
+                        </button>
+                    )}
                 </div>
             </header>
 
@@ -500,11 +522,14 @@ export default function ResumePage() {
                                                         Convert to LaTeX
                                                     </button>
                                                 )}
-                                                <button type="button" className="btn quiet" disabled={busy || past.length === 0} onClick={undo}>
+                                                <button type="button" className="btn quiet" disabled={busy || past.length === 0} title="Undo (Ctrl/Cmd+Z)" aria-keyshortcuts="Control+Z Meta+Z" onClick={undo}>
                                                     Undo
                                                 </button>
-                                                <button type="button" className="btn quiet" disabled={busy || future.length === 0} onClick={redo}>
+                                                <button type="button" className="btn quiet" disabled={busy || future.length === 0} title="Redo (Ctrl/Cmd+Shift+Z)" aria-keyshortcuts="Control+Shift+Z Meta+Shift+Z" onClick={redo}>
                                                     Redo
+                                                </button>
+                                                <button type="button" className="btn primary save" disabled={busy || !dirty} title="Save (Ctrl/Cmd+S)" aria-keyshortcuts="Control+S Meta+S" onClick={() => void save()}>
+                                                    {busy ? "Saving..." : "Save"}
                                                 </button>
                                             </div>
                                         </div>
