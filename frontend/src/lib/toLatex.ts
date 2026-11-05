@@ -111,6 +111,7 @@ if (import.meta.env.DEV) {
     const contact = toLatex("ALEX MENDER | +63 9000 | alex@mail.com\nSKILLS");
     const unnamed = toLatex("\u674e\u660e\nSKILLS");
     const ok = ["\\documentclass", "pdfauthor={ALEX MENDER}", "{\\LARGE\\bfseries ALEX MENDER}", "\\section*{SKILLS}", "Go \\& Rust\\_ \\#1 continued here -- done", "\\end{document}"].every((part) => out.includes(part));
-    const guarded = contact.includes("pdfauthor={ALEX MENDER}") && !contact.includes("+63") && !unnamed.includes("pdfauthor") && !unnamed.includes("\\bfseries }");
+    const meta = (document: string) => document.split("\n").find((line) => line.startsWith("\\hypersetup")) ?? "";
+    const guarded = meta(contact).includes("pdfauthor={ALEX MENDER}") && !meta(contact).includes("+63") && !meta(unnamed).includes("pdfauthor") && !unnamed.includes("\\bfseries }");
     if (!ok || !guarded || out.includes("\u2013") || out.includes("\\section*{ALEX MENDER}")) console.error("toLatex: self-check failed");
 }
