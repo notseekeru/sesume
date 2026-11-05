@@ -273,6 +273,7 @@ h3 {
     position: relative;
     flex: 1;
     min-height: 0;
+    --scroll: 0px;
     background: var(--surface);
 }
 
@@ -303,6 +304,11 @@ h3 {
 
 .gutter .no.strong {
     color: var(--good);
+}
+
+.gutter .no.touched {
+    color: var(--ink);
+    font-weight: 600;
 }
 
 .layer,
@@ -338,29 +344,68 @@ h3 {
 }
 
 .input::selection {
-    background: color-mix(in oklab, var(--accent) 30%, transparent);
+    background: color-mix(in oklab, var(--accent) 38%, transparent);
     color: transparent;
 }
 
 .line.weak {
-    background: color-mix(in oklab, var(--bad) 10%, transparent);
+    background: color-mix(in oklab, var(--bad) 24%, transparent);
+    text-decoration: underline;
+    text-decoration-color: color-mix(in oklab, var(--bad) 85%, transparent);
+    text-decoration-thickness: 2px;
+    text-underline-offset: 3px;
 }
 
 .line.strong {
-    background: color-mix(in oklab, var(--good) 10%, transparent);
+    background: color-mix(in oklab, var(--good) 22%, transparent);
+    text-decoration: underline;
+    text-decoration-color: color-mix(in oklab, var(--good) 85%, transparent);
+    text-decoration-thickness: 2px;
+    text-underline-offset: 3px;
+}
+
+.line.touched {
+    background: color-mix(in oklab, var(--accent) 30%, transparent);
 }
 
 .tok-command {
-    color: var(--accent);
+    color: light-dark(#1747c4, #8ab4ff);
+    font-weight: 500;
 }
 
 .tok-comment {
-    color: var(--muted);
+    color: light-dark(#5d6475, #7f8798);
     font-style: italic;
 }
 
 .tok-math {
-    color: var(--warn);
+    color: light-dark(#8a4b00, #ffc46b);
+}
+
+.ghost {
+    position: absolute;
+    left: 3.6rem;
+    right: 1rem;
+    z-index: 2;
+    pointer-events: none;
+    border: 1px solid var(--accent);
+    border-radius: 0.5rem;
+    background: var(--surface);
+    padding: 0.4rem 0.6rem;
+    box-shadow: 0 8px 24px light-dark(rgba(0, 0, 0, 0.18), rgba(0, 0, 0, 0.55));
+    font-size: 0.82rem;
+}
+
+.ghost p {
+    margin: 0;
+}
+
+.ghost p.ghost-title {
+    font-size: 0.64rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 0.15rem;
 }
 
 .welcome {

@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CodeEditor } from "../components/CodeEditor";
 import { ReviewPanel } from "../components/ReviewPanel";
 import { ApiError, compileLatex, createResume, deleteResume, extractResume, getResume, getResumeReview, listResumes, loadProvider, type Provider, type ResumeReview, type ResumeSummary, retryRewrite, reviewResume, saveProvider, updateResume } from "../lib/api";
 import { isLatex } from "../lib/latex";
-import { replaceLine } from "../lib/resumeText";
+import { replaceLine, type Suggestion } from "../lib/resumeText";
 import { toLatex } from "../lib/toLatex";
 
 interface Draft {
@@ -38,6 +38,7 @@ export default function ResumePage() {
     const [pasting, setPasting] = useState(false);
     const [dropping, setDropping] = useState(false);
     const [focus, setFocus] = useState<{ quote: string; n: number } | null>(null);
+    const [hover, setHover] = useState<Suggestion | null>(null);
     const [tab, setTab] = useState<"pdf" | "review">("review");
     const [provider, setProvider] = useState<Provider>(() => loadProvider());
     const burst = useRef(0);
@@ -46,6 +47,7 @@ export default function ResumePage() {
     const active = rows.find((row) => row.id === draft.id);
     const dirty = draft.id === null ? Boolean(draft.name.trim() || draft.text.trim()) : active !== undefined && (active.name !== draft.name || active.chars !== [...draft.text].length);
     const latex = isLatex(draft.text);
+    const suggestions = useMemo(() => (review?.rewrites ?? []).filter((line) => !finished.has(line.source)), [review, finished]);
 
     const resetHistory = useCallback(() => {
         setPast([]);
@@ -97,6 +99,7 @@ export default function ResumePage() {
         setPast((list) => list.slice(0, -1));
         setFuture((list) => [...list.slice(-(MAX_UNDO - 1)), { text: draft.text, source: last.source }]);
         burst.current = 0;
+        setHover(null);
         setDraft((current) => ({ ...current, text: last.text }));
         if (last.source) finish(last.source, false);
     }
@@ -107,6 +110,7 @@ export default function ResumePage() {
         setFuture((list) => list.slice(0, -1));
         setPast((list) => [...list.slice(-(MAX_UNDO - 1)), { text: draft.text, source: next.source }]);
         burst.current = 0;
+        setHover(null);
         setDraft((current) => ({ ...current, text: next.text }));
         if (next.source) finish(next.source, true);
     }
@@ -263,6 +267,7 @@ export default function ResumePage() {
         if (next === null) return false;
         remember(source);
         burst.current = 0;
+        setHover(null);
         setDraft((current) => ({ ...current, text: next }));
         return true;
     }
@@ -270,6 +275,7 @@ export default function ResumePage() {
     function convertToLatex() {
         remember();
         burst.current = 0;
+        setHover(null);
         setDraft((current) => ({ ...current, text: toLatex(current.text) }));
         setNotice(draft.id ? "Converted to LaTeX. Check the structure, then Save." : "Converted to LaTeX. Save it to see the preview.");
     }
@@ -339,7 +345,7 @@ export default function ResumePage() {
                                 </button>
                             </div>
                         </div>
-                        <CodeEditor value={draft.text} latex={latex} marks={review?.lines ?? []} focus={focus} placeholder="Paste your resume here..." onChange={editText} />
+                        <CodeEditor value={draft.text} latex={latex} marks={review?.lines ?? []} suggestions={suggestions} ghost={hover} focus={focus} placeholder="Paste your resume here..." onChange={editText} />
                     </section>
 
                     <section className="pane side">
@@ -372,7 +378,8 @@ export default function ResumePage() {
                                     onRetry={(source) => void retryEdit(source)}
                                     onDismiss={(source) => finish(source, true)}
                                     onFocusLine={focusLine}
-                                    finished={finished}
+                                    onHover={setHover}
+                                    suggestions={suggestions}
                                 />
                             )}
                         </div>

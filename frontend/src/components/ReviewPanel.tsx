@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { Provider, ResumeReview, ReviewLevel } from "../lib/api";
+import type { Suggestion } from "../lib/resumeText";
 
 const LEVEL_LABEL: Record<string, string> = { intern: "Intern", junior: "Junior", mid: "Mid-level", senior: "Senior", staff: "Staff", principal: "Principal" };
 const CALL_LABEL: Record<string, string> = { passes: "Passes", close: "Close", fails: "Fails" };
@@ -17,11 +18,12 @@ export interface ReviewPanelProps {
     onRetry: (source: string) => void;
     onDismiss: (source: string) => void;
     onFocusLine: (text: string) => void;
-    finished: Set<string>;
+    onHover: (hover: Suggestion | null) => void;
+    suggestions: Suggestion[];
 }
 
-export function ReviewPanel({ review, busy, error, dirty, saved, provider, onProvider, onReview, onApply, onRetry, onDismiss, onFocusLine, finished }: ReviewPanelProps) {
-    const open = (review?.rewrites ?? []).filter((line) => !finished.has(line.source));
+export function ReviewPanel({ review, busy, error, dirty, saved, provider, onProvider, onReview, onApply, onRetry, onDismiss, onFocusLine, onHover, suggestions }: ReviewPanelProps) {
+    const open = suggestions;
 
     return (
         <div className="review">
@@ -51,7 +53,7 @@ export function ReviewPanel({ review, busy, error, dirty, saved, provider, onPro
                     ) : (
                         <ul className="edits">
                             {open.map((line) => (
-                                <li key={line.source}>
+                                <li key={line.source} onMouseEnter={() => onHover(line)} onMouseLeave={() => onHover(null)}>
                                     <p className="was">{line.source}</p>
                                     <p className="now">{line.rewrite}</p>
                                     <div className="actions">

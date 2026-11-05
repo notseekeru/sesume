@@ -36,6 +36,11 @@ export function lineOf(text: string, quote: string): number | null {
 
 export type LineCall = "weak" | "safe" | "strong";
 
+export interface Suggestion {
+    source: string;
+    rewrite: string;
+}
+
 export interface QuotedLine {
     text: string;
     call: LineCall;
