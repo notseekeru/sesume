@@ -14,9 +14,6 @@
       "env": {
         "DIRENV_LOG_FORMAT": ""
       }
-    },
-    "neon": {
-      "url": "https://mcp.neon.tech/mcp"
     }
   }
 }
