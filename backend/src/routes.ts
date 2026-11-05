@@ -92,7 +92,7 @@ routes.post("/resumes/extract", async (c) => {
     if (declared > LIMITS.bytes + 64 * 1024) throw new Problem(413, `That file is larger than ${limit} MB. Trim it down, or paste the text instead.`);
     const form = await c.req.formData().catch(() => null);
     const file = form?.get("file");
-    if (!(file instanceof File)) throw new Problem(422, "That file isn't a PDF. Upload a PDF, or paste the text instead.");
+    if (!(file instanceof File)) throw new Problem(422, "Attach a PDF in the file field.");
     if (file.size > LIMITS.bytes) throw new Problem(413, `That file is larger than ${limit} MB. Trim it down, or paste the text instead.`);
     try {
         const got = await extractPdf(new Uint8Array(await file.arrayBuffer()));
