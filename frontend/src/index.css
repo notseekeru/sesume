@@ -122,10 +122,6 @@ h3 {
     flex-wrap: wrap;
 }
 
-.actions.spread {
-    justify-content: space-between;
-}
-
 .actions.end {
     margin-left: auto;
 }
@@ -192,23 +188,37 @@ h3 {
     background: var(--surface);
 }
 
-.panes {
+.columns {
     flex: 1;
     min-height: 0;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
+    display: flex;
+    align-items: stretch;
 }
 
 .pane {
     display: flex;
     flex-direction: column;
+    flex: 0 1 var(--share, 50%);
     min-width: 0;
     min-height: 0;
     background: var(--surface);
 }
 
-.pane + .pane {
-    border-left: 1px solid var(--line);
+.splitter {
+    flex: 0 0 5px;
+    background: var(--line);
+    cursor: col-resize;
+    touch-action: none;
+}
+
+.splitter:hover,
+body.resizing .splitter {
+    background: var(--accent);
+}
+
+body.resizing {
+    cursor: col-resize;
+    user-select: none;
 }
 
 .pane-bar {
@@ -238,22 +248,25 @@ h3 {
     margin-left: auto;
 }
 
-.tabs {
-    gap: 0.1rem;
+.toggles {
+    gap: 0.25rem;
 }
 
-.tab {
-    border: 0;
-    background: none;
+.toggle {
+    border-radius: 999px;
     color: var(--muted);
-    padding: 0.3rem 0.65rem;
-    border-radius: 0.35rem;
+    font-size: 0.74rem;
+    padding: 0.1rem 0.55rem;
 }
 
-.tab.on {
-    color: var(--ink);
-    background: var(--surface);
-    box-shadow: inset 0 -2px 0 var(--accent);
+.toggle.on {
+    border-color: var(--accent);
+    color: var(--accent);
+    font-weight: 600;
+}
+
+.end {
+    margin-left: auto;
 }
 
 .pane-body {
@@ -630,21 +643,31 @@ h3 {
     margin-top: 0.4rem;
 }
 
-.preview {
-    display: flex;
+.pdf-view {
     flex: 1;
-    flex-direction: column;
-    gap: 0.5rem;
     min-height: 0;
+    overflow: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.4rem;
+    background: var(--sunken);
 }
 
-.pdf {
-    flex: 1;
+.pdf-pages {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.6rem;
     width: 100%;
-    min-height: 0;
-    border: 1px solid var(--line);
-    border-radius: 0.5rem;
-    background: var(--sunken);
+}
+
+.pdf-page {
+    max-width: 100%;
+    background: #fff;
+    border-radius: 2px;
+    box-shadow: 0 2px 12px light-dark(rgba(0, 0, 0, 0.18), rgba(0, 0, 0, 0.55));
 }
 
 .log {
@@ -670,25 +693,33 @@ h3 {
         flex-wrap: wrap;
     }
 
-    .panes {
-        grid-template-columns: 1fr;
+    .columns {
+        flex-direction: column;
     }
 
-    .pane + .pane {
-        border-left: 0;
+    .splitter {
+        display: none;
+    }
+
+    .pane {
+        flex: 1 1 auto;
         border-top: 1px solid var(--line);
     }
 
-    .editor {
+    .pane:first-child {
+        border-top: 0;
+    }
+
+    .pane .editor {
         height: 60vh;
         min-height: 20rem;
     }
 
-    .pane.side .pane-body {
+    .pane .pane-body {
         max-height: 75vh;
     }
 
-    .preview .pdf {
+    .pdf-view {
         min-height: 60vh;
     }
 }

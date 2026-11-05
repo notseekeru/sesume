@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, Fragment, type PointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CodeEditor } from "../components/CodeEditor";
+import { PdfView } from "../components/PdfView";
 import { ReviewPanel } from "../components/ReviewPanel";
 import { ApiError, compileLatex, createResume, deleteResume, extractResume, getResume, getResumeReview, listResumes, loadProvider, type Provider, type ResumeReview, type ResumeSummary, retryRewrite, reviewResume, saveProvider, updateResume } from "../lib/api";
 import { isLatex } from "../lib/latex";
@@ -12,14 +13,58 @@ interface Draft {
     text: string;
 }
 
+type Panel = "editor" | "pdf" | "review";
+
+interface Layout {
+    shown: Record<Panel, boolean>;
+    widths: Record<Panel, number>;
+}
+
+const PANELS: Panel[] = ["editor", "pdf", "review"];
+const PANEL_LABEL: Record<Panel, string> = { editor: "Editor", pdf: "PDF", review: "Review" };
+const LAYOUT_KEY = "sesume.layout";
+const SHOW_SHARE = 0.3;
+const MIN_SHARE = 0.16;
 const EMPTY: Draft = { id: null, name: "", text: "" };
 const BURST_MS = 700;
 const MAX_UNDO = 30;
 const DEBOUNCE_MS = 900;
 
+const DEFAULT_LAYOUT: Layout = {
+    shown: { editor: true, pdf: true, review: true },
+    widths: { editor: 0.44, pdf: 0.32, review: 0.24 },
+};
+
 interface UndoStep {
     text: string;
     source?: string;
+}
+
+function loadLayout(): Layout {
+    try {
+        const raw = localStorage.getItem(LAYOUT_KEY);
+        if (!raw) return DEFAULT_LAYOUT;
+        const parsed = JSON.parse(raw) as Partial<Layout>;
+        const shown = { ...DEFAULT_LAYOUT.shown };
+        const widths = { ...DEFAULT_LAYOUT.widths };
+        for (const panel of PANELS) {
+            if (typeof parsed.shown?.[panel] === "boolean") shown[panel] = parsed.shown[panel];
+            const width = parsed.widths?.[panel];
+            if (typeof width === "number" && Number.isFinite(width) && width > 0) widths[panel] = width;
+        }
+        if (!PANELS.some((panel) => shown[panel])) return DEFAULT_LAYOUT;
+        return { shown, widths };
+    } catch {
+        return DEFAULT_LAYOUT;
+    }
+}
+
+function normalize(widths: Record<Panel, number>, shown: Record<Panel, boolean>): Record<Panel, number> {
+    const visible = PANELS.filter((panel) => shown[panel]);
+    const total = visible.reduce((sum, panel) => sum + widths[panel], 0) || 1;
+    const next = { ...widths };
+    for (const panel of visible) next[panel] = widths[panel] / total;
+    return next;
 }
 
 export default function ResumePage() {
@@ -39,15 +84,30 @@ export default function ResumePage() {
     const [dropping, setDropping] = useState(false);
     const [focus, setFocus] = useState<{ quote: string; n: number } | null>(null);
     const [hover, setHover] = useState<Suggestion | null>(null);
-    const [tab, setTab] = useState<"pdf" | "review">("review");
     const [provider, setProvider] = useState<Provider>(() => loadProvider());
+    const [layout, setLayout] = useState<Layout>(loadLayout);
     const burst = useRef(0);
+    const columns = useRef<HTMLDivElement>(null);
 
     const editing = draft.id !== null || pasting || importing;
     const active = rows.find((row) => row.id === draft.id);
     const dirty = draft.id === null ? Boolean(draft.name.trim() || draft.text.trim()) : active !== undefined && (active.name !== draft.name || active.chars !== [...draft.text].length);
     const latex = isLatex(draft.text);
     const suggestions = useMemo(() => (review?.rewrites ?? []).filter((line) => !finished.has(line.source)), [review, finished]);
+    const visible = PANELS.filter((panel) => layout.shown[panel]);
+    const mass = visible.reduce((sum, panel) => sum + layout.widths[panel], 0) || 1;
+    const share = (panel: Panel) => (layout.widths[panel] / mass) * 100;
+
+    useEffect(() => {
+        const timer = window.setTimeout(() => {
+            try {
+                localStorage.setItem(LAYOUT_KEY, JSON.stringify(layout));
+            } catch {
+                return;
+            }
+        }, 150);
+        return () => window.clearTimeout(timer);
+    }, [layout]);
 
     const resetHistory = useCallback(() => {
         setPast([]);
@@ -80,6 +140,44 @@ export default function ResumePage() {
     useEffect(() => {
         void loadReview(draft.id);
     }, [draft.id, loadReview]);
+
+    function togglePanel(panel: Panel) {
+        setLayout((current) => {
+            const showing = !current.shown[panel];
+            const shown = { ...current.shown, [panel]: showing };
+            if (!PANELS.some((next) => shown[next])) return current;
+            const widths = { ...current.widths };
+            if (showing) {
+                for (const next of PANELS) if (next !== panel && current.shown[next]) widths[next] *= 1 - SHOW_SHARE;
+                widths[panel] = SHOW_SHARE;
+            }
+            return { shown, widths: normalize(widths, shown) };
+        });
+    }
+
+    function startResize(event: PointerEvent<HTMLDivElement>, left: Panel, right: Panel) {
+        event.preventDefault();
+        const rect = columns.current?.getBoundingClientRect();
+        if (!rect) return;
+        const startX = event.clientX;
+        const start = { ...layout.widths };
+        const pair = start[left] + start[right];
+        const floor = Math.min(MIN_SHARE * mass, pair / 2);
+
+        const move = (next: globalThis.PointerEvent) => {
+            const delta = ((next.clientX - startX) / rect.width) * mass;
+            const at = Math.min(pair - floor, Math.max(floor, start[left] + delta));
+            setLayout((current) => ({ ...current, widths: { ...current.widths, [left]: at, [right]: pair - at } }));
+        };
+        const stop = () => {
+            window.removeEventListener("pointermove", move);
+            window.removeEventListener("pointerup", stop);
+            document.body.classList.remove("resizing");
+        };
+        document.body.classList.add("resizing");
+        window.addEventListener("pointermove", move);
+        window.addEventListener("pointerup", stop);
+    }
 
     function remember(source?: string) {
         setPast((list) => [...list.slice(-(MAX_UNDO - 1)), { text: draft.text, source }]);
@@ -280,10 +378,6 @@ export default function ResumePage() {
         setNotice(draft.id ? "Converted to LaTeX. Check the structure, then Save." : "Converted to LaTeX. Save it to see the preview.");
     }
 
-    function focusLine(quote: string) {
-        setFocus((current) => ({ quote, n: (current?.n ?? 0) + 1 }));
-    }
-
     function updateProvider(next: Provider) {
         setProvider(next);
         saveProvider(next);
@@ -305,6 +399,15 @@ export default function ResumePage() {
                         </button>
                     )}
                 </div>
+                {editing && (
+                    <div className="actions toggles">
+                        {PANELS.map((panel) => (
+                            <button key={panel} type="button" className={layout.shown[panel] ? "toggle on" : "toggle"} aria-pressed={layout.shown[panel]} onClick={() => togglePanel(panel)}>
+                                {PANEL_LABEL[panel]}
+                            </button>
+                        ))}
+                    </div>
+                )}
                 <span className="state">{dirty ? (draft.id ? "Unsaved changes" : "Not saved") : draft.id ? "Saved" : ""}</span>
                 <div className="actions end">
                     {draft.id ? (
@@ -327,63 +430,56 @@ export default function ResumePage() {
             {(error || notice) && <div className="banner">{error ? <p className="alert">{error}</p> : <p className="note">{notice}</p>}</div>}
 
             {editing ? (
-                <div className="panes">
-                    <section className="pane">
-                        <div className="pane-bar">
-                            <input className="name" value={draft.name} maxLength={80} placeholder="Resume name" aria-label="Resume name" onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} />
-                            <div className="actions">
-                                {!latex && draft.text.trim() !== "" && (
-                                    <button type="button" className="link" onClick={convertToLatex}>
-                                        Convert to LaTeX
-                                    </button>
+                <div className="columns" ref={columns}>
+                    {visible.map((panel, index) => (
+                        <Fragment key={panel}>
+                            {index > 0 && <div className="splitter" aria-hidden="true" onPointerDown={(event) => startResize(event, visible[index - 1], panel)} />}
+                            <section className="pane" style={{ "--share": `${share(panel)}%` } as CSSProperties}>
+                                {panel === "editor" && (
+                                    <>
+                                        <div className="pane-bar">
+                                            <input className="name" value={draft.name} maxLength={80} placeholder="Resume name" aria-label="Resume name" onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} />
+                                            <div className="actions">
+                                                {!latex && draft.text.trim() !== "" && (
+                                                    <button type="button" className="link" onClick={convertToLatex}>
+                                                        Convert to LaTeX
+                                                    </button>
+                                                )}
+                                                <button type="button" disabled={busy || past.length === 0} onClick={undo}>
+                                                    Undo
+                                                </button>
+                                                <button type="button" disabled={busy || future.length === 0} onClick={redo}>
+                                                    Redo
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <CodeEditor value={draft.text} latex={latex} marks={review?.lines ?? []} suggestions={suggestions} ghost={hover} focus={focus} placeholder="Paste your resume here..." onChange={editText} />
+                                    </>
                                 )}
-                                <button type="button" disabled={busy || past.length === 0} onClick={undo}>
-                                    Undo
-                                </button>
-                                <button type="button" disabled={busy || future.length === 0} onClick={redo}>
-                                    Redo
-                                </button>
-                            </div>
-                        </div>
-                        <CodeEditor value={draft.text} latex={latex} marks={review?.lines ?? []} suggestions={suggestions} ghost={hover} focus={focus} placeholder="Paste your resume here..." onChange={editText} />
-                    </section>
-
-                    <section className="pane side">
-                        <div className="pane-bar tabs">
-                            <button type="button" className={tab === "pdf" ? "tab on" : "tab"} onClick={() => setTab("pdf")}>
-                                PDF
-                            </button>
-                            <button type="button" className={tab === "review" ? "tab on" : "tab"} onClick={() => setTab("review")}>
-                                Review
-                            </button>
-                        </div>
-                        <div className={tab === "pdf" ? "pane-body fill" : "pane-body"}>
-                            {tab === "pdf" ? (
-                                latex ? (
-                                    <Preview text={draft.text} />
-                                ) : (
-                                    <p className="hint pad">Convert the text to LaTeX to see the preview.</p>
-                                )
-                            ) : (
-                                <ReviewPanel
-                                    review={review}
-                                    busy={reviewing}
-                                    error={reviewError}
-                                    dirty={dirty}
-                                    saved={draft.id !== null}
-                                    provider={provider}
-                                    onProvider={updateProvider}
-                                    onReview={() => void reviewCurrent()}
-                                    onApply={applyRewrite}
-                                    onRetry={(source) => void retryEdit(source)}
-                                    onDismiss={(source) => finish(source, true)}
-                                    onFocusLine={focusLine}
-                                    onHover={setHover}
-                                    suggestions={suggestions}
-                                />
-                            )}
-                        </div>
-                    </section>
+                                {panel === "pdf" && (latex ? <Preview text={draft.text} /> : <p className="hint pad">Convert the text to LaTeX to see the preview.</p>)}
+                                {panel === "review" && (
+                                    <div className="pane-body">
+                                        <ReviewPanel
+                                            review={review}
+                                            busy={reviewing}
+                                            error={reviewError}
+                                            dirty={dirty}
+                                            saved={draft.id !== null}
+                                            provider={provider}
+                                            onProvider={updateProvider}
+                                            onReview={() => void reviewCurrent()}
+                                            onApply={applyRewrite}
+                                            onRetry={(source) => void retryEdit(source)}
+                                            onDismiss={(source) => finish(source, true)}
+                                            onFocusLine={(quote) => setFocus((current) => ({ quote, n: (current?.n ?? 0) + 1 }))}
+                                            onHover={setHover}
+                                            suggestions={suggestions}
+                                        />
+                                    </div>
+                                )}
+                            </section>
+                        </Fragment>
+                    ))}
                 </div>
             ) : (
                 <main className="welcome">
@@ -434,6 +530,7 @@ export default function ResumePage() {
 }
 
 function Preview({ text }: { text: string }) {
+    const [pdf, setPdf] = useState<Uint8Array | null>(null);
     const [url, setUrl] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [busy, setBusy] = useState(false);
@@ -449,6 +546,7 @@ function Preview({ text }: { text: string }) {
                 if (current.current) URL.revokeObjectURL(current.current);
                 current.current = URL.createObjectURL(blob);
                 setUrl(current.current);
+                setPdf(new Uint8Array(await blob.arrayBuffer()));
                 setError(null);
             } catch (problem) {
                 if (!alive) return;
@@ -471,16 +569,16 @@ function Preview({ text }: { text: string }) {
     );
 
     return (
-        <div className="preview">
-            <div className="actions spread">
-                <span className="hint">{busy ? "Compiling..." : error ? "Does not compile" : url ? "PDF" : "Waiting"}</span>
+        <>
+            <div className="pane-bar">
+                <span className="hint">{busy ? "Compiling..." : error ? "Does not compile" : pdf ? "PDF" : "Waiting"}</span>
                 {url && !error && (
-                    <a className="link" href={url} target="_blank" rel="noreferrer">
+                    <a className="link end" href={url} target="_blank" rel="noreferrer">
                         Open
                     </a>
                 )}
             </div>
-            {error ? <pre className="log">{error}</pre> : url ? <iframe className="pdf" src={url} title="Resume preview" /> : null}
-        </div>
+            <div className="pane-body fill">{error ? <pre className="log">{error}</pre> : pdf ? <PdfView data={pdf} /> : null}</div>
+        </>
     );
 }
