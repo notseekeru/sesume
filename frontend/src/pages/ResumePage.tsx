@@ -1,7 +1,9 @@
 import { type CSSProperties, Fragment, type PointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CodeEditor } from "../components/CodeEditor";
+import { Logo } from "../components/Logo";
 import { PdfView } from "../components/PdfView";
 import { ReviewPanel } from "../components/ReviewPanel";
+import { ThemeToggle } from "../components/ThemeToggle";
 import { ApiError, compileLatex, createResume, deleteResume, extractResume, getResume, getResumeReview, listResumes, loadProvider, type Provider, type ResumeReview, type ResumeSummary, retryRewrite, reviewResume, saveProvider, updateResume } from "../lib/api";
 import { isLatex } from "../lib/latex";
 import { replaceLine, type Suggestion } from "../lib/resumeText";
@@ -32,12 +34,25 @@ const DEBOUNCE_MS = 900;
 
 const DEFAULT_LAYOUT: Layout = {
     shown: { editor: true, pdf: true, review: true },
-    widths: { editor: 0.44, pdf: 0.32, review: 0.24 },
+    widths: { editor: 0.42, pdf: 0.3, review: 0.28 },
 };
+
+const COMPACT_QUERY = "(max-width: 900px)";
 
 interface UndoStep {
     text: string;
     source?: string;
+}
+
+function useCompact(): boolean {
+    const [compact, setCompact] = useState(() => window.matchMedia(COMPACT_QUERY).matches);
+    useEffect(() => {
+        const query = window.matchMedia(COMPACT_QUERY);
+        const sync = () => setCompact(query.matches);
+        query.addEventListener("change", sync);
+        return () => query.removeEventListener("change", sync);
+    }, []);
+    return compact;
 }
 
 function loadLayout(): Layout {
@@ -87,6 +102,9 @@ export default function ResumePage() {
     const [hover, setHover] = useState<Suggestion | null>(null);
     const [provider, setProvider] = useState<Provider>(() => loadProvider());
     const [layout, setLayout] = useState<Layout>(loadLayout);
+    // AI HERE: compact mode reuses the pane toggles as tabs and keeps the choice in memory, not storage. Upgrade path: persist the mobile pane.
+    const [tab, setTab] = useState<Panel>(() => PANELS.find((panel) => layout.shown[panel]) ?? "editor");
+    const compact = useCompact();
     const burst = useRef(0);
     const columns = useRef<HTMLDivElement>(null);
 
@@ -94,7 +112,7 @@ export default function ResumePage() {
     const dirty = draft.id === null ? Boolean(draft.name.trim() || draft.text.trim()) : saved !== null && (draft.name !== saved.name || draft.text !== saved.text);
     const latex = isLatex(draft.text);
     const suggestions = useMemo(() => (review?.rewrites ?? []).filter((line) => !finished.has(line.source)), [review, finished]);
-    const visible = PANELS.filter((panel) => layout.shown[panel]);
+    const visible = compact ? [tab] : PANELS.filter((panel) => layout.shown[panel]);
     const mass = visible.reduce((sum, panel) => sum + layout.widths[panel], 0) || 1;
     const share = (panel: Panel) => (layout.widths[panel] / mass) * 100;
 
@@ -145,6 +163,10 @@ export default function ResumePage() {
     }, [draft.id, loadReview]);
 
     function togglePanel(panel: Panel) {
+        if (compact) {
+            setTab(panel);
+            return;
+        }
         setLayout((current) => {
             const showing = !current.shown[panel];
             const shown = { ...current.shown, [panel]: showing };
@@ -394,49 +416,73 @@ export default function ResumePage() {
 
     return (
         <div className="studio">
-            <header className="bar">
-                <span className="brand">sesume</span>
-                <div className="chips">
+            <header className="masthead">
+                <div className="brand">
+                    <Logo />
+                    <span className="brand-name">sesume</span>
+                </div>
+                <nav className="tabs" aria-label="Resumes">
                     {rows.map((row) => (
-                        <button key={row.id} type="button" className={row.id === draft.id ? "chip on" : "chip"} onClick={() => void open(row.id)}>
+                        <button key={row.id} type="button" className={row.id === draft.id ? "tab on" : "tab"} onClick={() => void open(row.id)}>
                             {row.name}
                         </button>
                     ))}
                     {draft.id && (
-                        <button type="button" className="chip new" onClick={startNew}>
+                        <button type="button" className="tab new" onClick={startNew}>
                             + New
                         </button>
                     )}
-                </div>
+                </nav>
                 {editing && (
-                    <div className="actions toggles">
-                        {PANELS.map((panel) => (
-                            <button key={panel} type="button" className={layout.shown[panel] ? "toggle on" : "toggle"} aria-pressed={layout.shown[panel]} onClick={() => togglePanel(panel)}>
-                                {PANEL_LABEL[panel]}
-                            </button>
-                        ))}
-                    </div>
+                    <fieldset className="seg" aria-label="Panes">
+                        <legend className="sr">Panes</legend>
+                        {PANELS.map((panel) => {
+                            const on = compact ? tab === panel : layout.shown[panel];
+                            return (
+                                <button key={panel} type="button" className={on ? "on" : ""} aria-pressed={on} onClick={() => togglePanel(panel)}>
+                                    {PANEL_LABEL[panel]}
+                                </button>
+                            );
+                        })}
+                    </fieldset>
                 )}
-                <span className="state">{dirty ? (draft.id ? "Unsaved changes" : "Not saved") : draft.id ? "Saved" : ""}</span>
-                <div className="actions end">
+                {editing && dirty && (
+                    <span className="state" aria-live="polite">
+                        <span className="dot" aria-hidden />
+                        {draft.id ? "Unsaved changes" : "Not saved"}
+                    </span>
+                )}
+                <div className="actions">
+                    <ThemeToggle />
                     {draft.id ? (
-                        <button type="button" disabled={busy} onClick={() => void remove()}>
+                        <button type="button" className="btn" disabled={busy} onClick={() => void remove()}>
                             Delete
                         </button>
                     ) : (
                         editing && (
-                            <button type="button" disabled={busy} onClick={discard}>
+                            <button type="button" className="btn" disabled={busy} onClick={discard}>
                                 {dirty ? "Discard" : "Cancel"}
                             </button>
                         )
                     )}
-                    <button type="button" className="primary" disabled={busy || !dirty} onClick={() => void save()}>
+                    <button type="button" className="btn primary" disabled={busy || !dirty} onClick={() => void save()}>
                         {busy ? "Saving..." : "Save"}
                     </button>
                 </div>
             </header>
 
-            {(error || notice) && <div className="banner">{error ? <p className="alert">{error}</p> : <p className="note">{notice}</p>}</div>}
+            {(error || notice) && (
+                <div className="flash" role={error ? "alert" : "status"}>
+                    {error ? (
+                        <span className="glyph" aria-hidden>
+                            !
+                        </span>
+                    ) : (
+                        <span className="dot" aria-hidden />
+                    )}
+                    <p>{error ?? notice}</p>
+                </div>
+            )}
 
             {editing ? (
                 <div className="columns" ref={columns}>
@@ -450,14 +496,14 @@ export default function ResumePage() {
                                             <input className="name" value={draft.name} maxLength={80} placeholder="Resume name" aria-label="Resume name" onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} />
                                             <div className="actions">
                                                 {!latex && draft.text.trim() !== "" && (
-                                                    <button type="button" className="link" onClick={convertToLatex}>
+                                                    <button type="button" className="btn quiet" onClick={convertToLatex}>
                                                         Convert to LaTeX
                                                     </button>
                                                 )}
-                                                <button type="button" disabled={busy || past.length === 0} onClick={undo}>
+                                                <button type="button" className="btn quiet" disabled={busy || past.length === 0} onClick={undo}>
                                                     Undo
                                                 </button>
-                                                <button type="button" disabled={busy || future.length === 0} onClick={redo}>
+                                                <button type="button" className="btn quiet" disabled={busy || future.length === 0} onClick={redo}>
                                                     Redo
                                                 </button>
                                             </div>
@@ -465,26 +511,41 @@ export default function ResumePage() {
                                         <CodeEditor value={draft.text} latex={latex} marks={review?.lines ?? []} suggestions={suggestions} ghost={hover} focus={focus} placeholder="Paste your resume here..." onChange={editText} />
                                     </>
                                 )}
-                                {panel === "pdf" && (latex ? <Preview text={draft.text} /> : <p className="hint pad">Convert the text to LaTeX to see the preview.</p>)}
+                                {panel === "pdf" &&
+                                    (latex ? (
+                                        <Preview text={draft.text} />
+                                    ) : (
+                                        <>
+                                            <div className="pane-bar pane-bar-plain">
+                                                <span className="pane-label">Preview</span>
+                                            </div>
+                                            <p className="hint pad">Convert the text to LaTeX to see the preview.</p>
+                                        </>
+                                    ))}
                                 {panel === "review" && (
-                                    <div className="pane-body">
-                                        <ReviewPanel
-                                            review={review}
-                                            busy={reviewing}
-                                            error={reviewError}
-                                            dirty={dirty}
-                                            saved={draft.id !== null}
-                                            provider={provider}
-                                            onProvider={updateProvider}
-                                            onReview={() => void reviewCurrent()}
-                                            onApply={applyRewrite}
-                                            onRetry={(source) => void retryEdit(source)}
-                                            onDismiss={(source) => finish(source, true)}
-                                            onFocusLine={(quote) => setFocus((current) => ({ quote, n: (current?.n ?? 0) + 1 }))}
-                                            onHover={setHover}
-                                            suggestions={suggestions}
-                                        />
-                                    </div>
+                                    <>
+                                        <div className="pane-bar pane-bar-plain">
+                                            <span className="pane-label">Review</span>
+                                        </div>
+                                        <div className="pane-body">
+                                            <ReviewPanel
+                                                review={review}
+                                                busy={reviewing}
+                                                error={reviewError}
+                                                dirty={dirty}
+                                                saved={draft.id !== null}
+                                                provider={provider}
+                                                onProvider={updateProvider}
+                                                onReview={() => void reviewCurrent()}
+                                                onApply={applyRewrite}
+                                                onRetry={(source) => void retryEdit(source)}
+                                                onDismiss={(source) => finish(source, true)}
+                                                onFocusLine={(quote) => setFocus((current) => ({ quote, n: (current?.n ?? 0) + 1 }))}
+                                                onHover={setHover}
+                                                suggestions={suggestions}
+                                            />
+                                        </div>
+                                    </>
                                 )}
                             </section>
                         </Fragment>
@@ -492,46 +553,41 @@ export default function ResumePage() {
                 </div>
             ) : (
                 <main className="welcome">
-                    <label
-                        className={dropping ? "dropzone dropping" : "dropzone"}
-                        onDragOver={(event) => {
-                            event.preventDefault();
-                            setDropping(true);
-                        }}
-                        onDragLeave={(event) => {
-                            if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDropping(false);
-                        }}
-                        onDrop={(event) => {
-                            event.preventDefault();
-                            setDropping(false);
-                            void pick(event.dataTransfer.files?.[0]);
-                        }}
-                    >
-                        <span className="dropzone-title">{dropping ? "Drop it" : busy ? "Reading the PDF..." : "Drop a PDF here, or click to browse"}</span>
-                        <input
-                            type="file"
-                            accept="application/pdf,.pdf"
-                            disabled={busy}
-                            hidden
-                            onChange={(event) => {
-                                const file = event.target.files?.[0];
-                                event.target.value = "";
-                                void pick(file);
-                            }}
-                        />
-                        <button
-                            type="button"
-                            className="link"
-                            disabled={busy}
-                            onClick={(event) => {
+                    <div className="welcome-card">
+                        <label
+                            className={dropping ? "dropzone dropping" : "dropzone"}
+                            onDragOver={(event) => {
                                 event.preventDefault();
-                                setPasting(true);
+                                setDropping(true);
+                            }}
+                            onDragLeave={(event) => {
+                                if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDropping(false);
+                            }}
+                            onDrop={(event) => {
+                                event.preventDefault();
+                                setDropping(false);
+                                void pick(event.dataTransfer.files?.[0]);
                             }}
                         >
+                            <Logo className="logo-lg" />
+                            <span className="dropzone-title">{dropping ? "Drop it" : busy ? "Reading the PDF..." : "Drop a PDF here, or click to browse"}</span>
+                            <input
+                                type="file"
+                                className="sr"
+                                accept="application/pdf,.pdf"
+                                disabled={busy}
+                                onChange={(event) => {
+                                    const file = event.target.files?.[0];
+                                    event.target.value = "";
+                                    void pick(file);
+                                }}
+                            />
+                        </label>
+                        <button type="button" className="btn link paste" disabled={busy} onClick={() => setPasting(true)}>
                             Paste resume instead
                         </button>
-                    </label>
-                    <p className="hint pad">Single account, no login: every resume here is stored unencrypted in this deployment's database.</p>
+                        <p className="hint">Single account, no login: every resume here is stored unencrypted in this deployment's database.</p>
+                    </div>
                 </main>
             )}
         </div>
@@ -580,9 +636,14 @@ function Preview({ text }: { text: string }) {
     return (
         <>
             <div className="pane-bar">
-                <span className="hint">{busy ? "Compiling..." : error ? "Does not compile" : pdf ? "PDF" : "Waiting"}</span>
+                <span className="pane-label">Preview</span>
+                {(busy || error || !pdf) && (
+                    <span className="state" aria-live="polite">
+                        {busy ? "Compiling..." : error ? "Does not compile" : "Waiting"}
+                    </span>
+                )}
                 {url && !error && (
-                    <a className="link end" href={url} target="_blank" rel="noreferrer">
+                    <a className="btn quiet end" href={url} target="_blank" rel="noreferrer">
                         Open
                     </a>
                 )}
