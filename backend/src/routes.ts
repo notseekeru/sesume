@@ -1,6 +1,8 @@
 import type { Context } from "hono";
 import { Hono } from "hono";
+import { bodyLimit } from "hono/body-limit";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
+import { DatabaseError } from "pg";
 import { pool } from "./db.js";
 import * as latex from "./latex.js";
 import { configFrom, isStub, reviewResume, rewriteLine } from "./llm.js";
@@ -60,8 +62,17 @@ function reviewJson(review: unknown, createdAt: unknown, fresh: boolean, status:
 
 const routes = new Hono();
 
+routes.use("*", async (c, next) => {
+    const started = performance.now();
+    await next();
+    console.info(`${c.req.method} ${c.req.path} ${c.res.status} ${Math.round(performance.now() - started)}ms`);
+});
+
+const jsonLimit = bodyLimit({ maxSize: 512 * 1024, onError: (c) => c.json({ detail: "That request is too large." }, 413) });
+
 routes.onError((error, c) => {
     if (error instanceof Problem) return c.json({ detail: error.message }, error.status);
+    if (error instanceof DatabaseError && ["23514", "22001", "22003"].includes(error.code ?? "")) return c.json({ detail: "That resume does not fit what this deployment stores." }, 422);
     console.error("route.error", error);
     return c.json({ detail: "Something went wrong." }, 500);
 });
@@ -92,13 +103,13 @@ routes.post("/resumes/extract", async (c) => {
     }
 });
 
-routes.post("/resumes", async (c) => {
+routes.post("/resumes", jsonLimit, async (c) => {
     const input = await body<{ name?: unknown; text?: unknown }>(c);
     const saved = await one(`INSERT INTO resumes (name, text) VALUES ($1, $2) RETURNING ${RESUME_COLS_WITH_TEXT}`, [resumeName(input.name), resumeBody(input.text)]);
     return c.json(saved, 201);
 });
 
-routes.put("/resumes/:id", async (c) => {
+routes.put("/resumes/:id", jsonLimit, async (c) => {
     const id = c.req.param("id");
     const input = await body<{ name?: unknown; text?: unknown }>(c);
     const saved = UUID.test(id) ? await one(`UPDATE resumes SET name = $2, text = $3, updated_at = now() WHERE id = $1 RETURNING ${RESUME_COLS_WITH_TEXT}`, [id, resumeName(input.name), resumeBody(input.text)]) : null;
@@ -140,7 +151,7 @@ routes.post("/resumes/:id/review", async (c) => {
     return reviewJson(saved?.review, saved?.created_at, true, 201);
 });
 
-routes.post("/resumes/:id/review/rewrite", async (c) => {
+routes.post("/resumes/:id/review/rewrite", jsonLimit, async (c) => {
     const id = c.req.param("id");
     const input = await body<{ source?: unknown }>(c);
     const found = UUID.test(id)
@@ -168,7 +179,7 @@ routes.post("/resumes/:id/review/rewrite", async (c) => {
     return reviewJson(saved?.review, saved?.created_at, true);
 });
 
-routes.post("/resumes/preview", async (c) => {
+routes.post("/resumes/preview", jsonLimit, async (c) => {
     const input = await body<{ text?: unknown }>(c);
     const text = typeof input.text === "string" ? input.text : "";
     if (!text.includes("\\documentclass")) throw new Problem(422, "That is not a LaTeX document: it needs a \\documentclass line.");

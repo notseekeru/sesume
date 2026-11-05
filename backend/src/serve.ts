@@ -9,7 +9,8 @@ const server = serve({ fetch: app.fetch, port }, (info) => {
 });
 
 const shutdown = async () => {
-    server.close();
+    if ("closeIdleConnections" in server) server.closeIdleConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
     await pool.end();
 };
 

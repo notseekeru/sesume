@@ -23,3 +23,13 @@ FROM base AS dev
 EXPOSE 4100
 
 CMD ["npm", "run", "dev"]
+
+FROM base AS prod
+
+ENV NODE_ENV=production
+
+RUN npm run build && npm prune --omit=dev
+
+EXPOSE 4100
+
+CMD ["node", "dist/serve.js"]
