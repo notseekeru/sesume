@@ -47,11 +47,13 @@ const res = await tools.mcp__playwright__browser_evaluate({
 
 ## Routes
 
-Routes (`react-router-dom`): Home `/`, catch-all `*`.
+Routes (`react-router-dom`): editor `/`, catch-all `*`.
 
-1. `/`: wait for `main h1` and assert it reads `sesume`.
-2. Click **"404 route"** (an `<a>` to `/missing`) and assert `main h1` reads `Not found`.
-3. Click **"Back home"** and assert the landing heading again.
+1. `/`: wait for `.studio`. With no saved resume the page shows `main.welcome`, otherwise the two panes.
+2. Empty state: click **Paste resume instead**, type into `input.name` and `textarea.input`, click `.bar button.primary`, then assert `.state` reads `Saved` and a `.chip` exists.
+3. Click **Convert to LaTeX**, save, open the PDF tab and wait for `.preview .pdf` (the iframe carries a blob URL).
+4. Review tab: the panel needs a provider. Fill the three `.provider input` fields and press `.review-head button.primary`; assert `.badge` and `.rungs`/`.rung` render.
+5. `/missing`: assert `main h1` reads `Not found`.
 
 That is the whole surface. Add steps here when routes exist.
 
