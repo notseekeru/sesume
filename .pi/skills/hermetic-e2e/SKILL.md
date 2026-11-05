@@ -59,8 +59,9 @@ That is the whole surface. Add steps here when routes exist.
 
 - Dev stack up: `make up`. `/` on 5373 and `/api/healthz` on 4100 must answer 200.
 - No auth: nothing in this app gates a route.
-- `playwright-mcp` must resolve on PATH, which means pi running inside the flake shell
-  (`nix develop`/direnv). When it does not, the server fails at session start and `pi mcp list` says so.
+- The entry runs `direnv exec . playwright-mcp`, so the cached flake shell supplies the binary from
+  any host shell. `.envrc` must be allowed once (`direnv allow`); otherwise the server fails at
+  session start and `pi mcp list` says so.
 - Adding or changing a server mid-session needs `/reload`.
 
 ## After a run

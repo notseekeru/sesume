@@ -1,13 +1,19 @@
 {
   "mcpServers": {
     "playwright": {
-      "command": "playwright-mcp",
+      "command": "direnv",
       "args": [
+        "exec",
+        ".",
+        "playwright-mcp",
         "--headless",
         "--isolated",
         "--browser",
         "chromium"
-      ]
+      ],
+      "env": {
+        "DIRENV_LOG_FORMAT": ""
+      }
     },
     "neon": {
       "url": "https://mcp.neon.tech/mcp"
