@@ -70,6 +70,7 @@ function normalize(widths: Record<Panel, number>, shown: Record<Panel, boolean>)
 export default function ResumePage() {
     const [rows, setRows] = useState<ResumeSummary[]>([]);
     const [draft, setDraft] = useState<Draft>(EMPTY);
+    const [saved, setSaved] = useState<{ name: string; text: string } | null>(null);
     const [review, setReview] = useState<ResumeReview | null>(null);
     const [past, setPast] = useState<UndoStep[]>([]);
     const [future, setFuture] = useState<UndoStep[]>([]);
@@ -90,8 +91,7 @@ export default function ResumePage() {
     const columns = useRef<HTMLDivElement>(null);
 
     const editing = draft.id !== null || pasting || importing;
-    const active = rows.find((row) => row.id === draft.id);
-    const dirty = draft.id === null ? Boolean(draft.name.trim() || draft.text.trim()) : active !== undefined && (active.name !== draft.name || active.chars !== [...draft.text].length);
+    const dirty = draft.id === null ? Boolean(draft.name.trim() || draft.text.trim()) : saved !== null && (draft.name !== saved.name || draft.text !== saved.text);
     const latex = isLatex(draft.text);
     const suggestions = useMemo(() => (review?.rewrites ?? []).filter((line) => !finished.has(line.source)), [review, finished]);
     const visible = PANELS.filter((panel) => layout.shown[panel]);
@@ -127,6 +127,9 @@ export default function ResumePage() {
             if (list.length) {
                 const full = await getResume(list[0].id);
                 setDraft({ id: full.id, name: full.name, text: full.text });
+                setSaved({ name: full.name, text: full.text });
+            } else {
+                setSaved(null);
             }
         } catch {
             setError("Could not load your resumes.");
@@ -247,6 +250,7 @@ export default function ResumePage() {
         try {
             const got = await extractResume(file);
             setDraft({ id: null, name: file.name.replace(/\.pdf$/i, "").slice(0, 80), text: got.text });
+            setSaved(null);
             setPasting(true);
             setImporting(false);
             resetHistory();
@@ -270,6 +274,7 @@ export default function ResumePage() {
             const saved = draft.id ? await updateResume(draft.id, { name, text: draft.text }) : await createResume({ name, text: draft.text });
             setRows((list) => (draft.id ? list.map((row) => (row.id === saved.id ? saved : row)) : [saved, ...list]));
             setDraft({ id: saved.id, name: saved.name, text: saved.text });
+            setSaved({ name: saved.name, text: saved.text });
             setPasting(false);
             setImporting(false);
             setNotice("Saved.");
@@ -290,6 +295,7 @@ export default function ResumePage() {
         try {
             const full = await getResume(id);
             setDraft({ id: full.id, name: full.name, text: full.text });
+            setSaved({ name: full.name, text: full.text });
             resetHistory();
         } catch (problem) {
             setError(problem instanceof ApiError ? problem.message : "Could not open that resume.");
@@ -298,6 +304,7 @@ export default function ResumePage() {
 
     function startNew() {
         setDraft(EMPTY);
+        setSaved(null);
         resetHistory();
         setPasting(false);
         setImporting(true);
@@ -308,6 +315,7 @@ export default function ResumePage() {
     function discard() {
         if (dirty && !confirm("Discard these unsaved changes?")) return;
         setDraft(EMPTY);
+        setSaved(null);
         resetHistory();
         setPasting(false);
         setImporting(false);
@@ -324,6 +332,7 @@ export default function ResumePage() {
             const rest = rows.filter((row) => row.id !== draft.id);
             setRows(rest);
             setDraft(EMPTY);
+            setSaved(null);
             resetHistory();
             setPasting(false);
             setImporting(false);
@@ -375,7 +384,7 @@ export default function ResumePage() {
         burst.current = 0;
         setHover(null);
         setDraft((current) => ({ ...current, text: toLatex(current.text) }));
-        setNotice(draft.id ? "Converted to LaTeX. Check the structure, then Save." : "Converted to LaTeX. Save it to see the preview.");
+        setNotice("Converted to LaTeX. Check the structure, then Save.");
     }
 
     function updateProvider(next: Provider) {
