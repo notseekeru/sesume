@@ -18,6 +18,9 @@ export default function Home() {
             <h1>sesume</h1>
             <p>api: {health}</p>
             <p>
+                <Link to="/resume">Resume</Link>
+            </p>
+            <p>
                 <Link to="/missing">404 route</Link>
             </p>
         </main>
