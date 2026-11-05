@@ -54,6 +54,10 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Test
+        if: matrix.service == 'backend'
+        run: npm test
+
       - name: Build
         run: npm run build
 

@@ -1,5 +1,11 @@
 FROM node:lts-alpine3.24 AS base
 
+# The preview compiles LaTeX in this image (src/latex.ts). Only the collections the generated preamble
+# loads are installed; texlive-most is deliberately absent.
+RUN apk add --no-cache texlive texmf-dist-latexrecommended texmf-dist-latexextra texmf-dist-fontsrecommended \
+    && rm -rf /usr/share/texmf-dist/doc /usr/share/texmf-dist/source \
+    && mktexlsr
+
 WORKDIR /app
 
 COPY --chown=node:node package*.json ./
@@ -17,3 +23,13 @@ FROM base AS dev
 EXPOSE 4100
 
 CMD ["npm", "run", "dev"]
+
+FROM base AS prod
+
+ENV NODE_ENV=production
+
+RUN npm run build && npm prune --omit=dev
+
+EXPOSE 4100
+
+CMD ["node", "dist/serve.js"]

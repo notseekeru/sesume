@@ -7,8 +7,8 @@ export const pool = new Pool({
     connectionString: databaseUrl,
     max: 10,
     connectionTimeoutMillis: 2000,
-    statement_timeout: 2000,
-    query_timeout: 2000,
+    statement_timeout: 5000,
+    query_timeout: 5000,
     idleTimeoutMillis: 30000,
     maxUses: 10000,
 });

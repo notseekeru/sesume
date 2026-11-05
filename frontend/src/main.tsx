@@ -3,7 +3,10 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import App from "./App";
 import ErrorBoundary from "./components/ErrorBoundary";
+import { applyTheme, loadTheme } from "./lib/theme";
 import "./index.css";
+
+applyTheme(loadTheme());
 
 const root = document.getElementById("root");
 if (!root) throw new Error("root element missing");

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# pi-history.sh — project a pi session JSONL down to its signal.
+# pi-history.sh: project a pi session JSONL down to its signal.
 #
 # Kills ~95%+ of session bytes (toolResults, toolCall args, checkpoints,
 # scaffolding) and keeps the slices that carry reasoning and the user's own

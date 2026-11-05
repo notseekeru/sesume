@@ -8,7 +8,7 @@ description: >-
 
 # Hermetic E2E
 
-One path: the `playwright` MCP server, called from codemode. No node runner, no host script, no CJS.
+One path: the `playwright` MCP server, called from codemode. No node runner, host script, or CJS.
 Target is the real frontend at `localhost:5373` and the real backend at `localhost:4100`.
 
 ## Call shape
@@ -35,9 +35,7 @@ const res = await tools.mcp__playwright__browser_evaluate({
 
 ## Browsing rules
 
-- **Don't snapshot-spam.** `browser_snapshot` dumps a full YAML accessibility tree into context.
-  Snapshot once for refs, act, then gate the next read on `browser_wait_for` (`{text}`, `{textGone}`,
-  `{time}`) instead of a fixed delay.
+- Snapshot once and gate the next read on `browser_wait_for`; `browser_snapshot` dumps the whole accessibility tree into context.
 - `target` takes a snapshot ref (`e8`) or a unique CSS selector.
 - Tool names carry the server prefix: a bare `browser_navigate` is "Tool not found".
 - `browser_run_code_unsafe` runs arbitrary JS in the server process (RCE-equivalent). Reach for it
@@ -47,13 +45,12 @@ const res = await tools.mcp__playwright__browser_evaluate({
 
 ## Routes
 
-Routes (`react-router-dom`): Home `/`, catch-all `*`.
-
-1. `/`: wait for `main h1` and assert it reads `sesume`.
-2. Click **"404 route"** (an `<a>` to `/missing`) and assert `main h1` reads `Not found`.
-3. Click **"Back home"** and assert the landing heading again.
-
-That is the whole surface. Add steps here when routes exist.
+1. `/`: wait for `.studio`. With no saved resume the page shows `main.welcome`, otherwise the three panes.
+2. Empty state: click **Paste resume instead**, type into `input.name` and `textarea.input`, click `.bar button.primary`, then assert `.state` reads `Saved` and a `.chip` exists.
+3. Click **Convert to LaTeX** and wait for a `.pdf-page` canvas. The PDF panel renders through pdfjs, so there is no browser viewer chrome.
+4. Review panel: the panel needs a provider. Fill the three `.provider input` fields and press `.review-head button.primary`; assert `.badge` and `.rungs`/`.rung` render.
+5. Layout: press a `.toggle` to hide a panel, drag a `.splitter` and assert the pane widths change, then reload and assert they survived.
+6. `/missing`: assert `main h1` reads `Not found`.
 
 ## Preconditions
 

@@ -3,7 +3,27 @@
     <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <meta name="color-scheme" content="light dark" />
+        <meta name="theme-color" content="#FFFFFF" />
+        <!-- AI HERE: favicon mirrors the light-theme logo; update both. -->
+        <link
+            rel="icon"
+            href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='0' fill='%23111111'/%3E%3Cg fill='%23FFFFFF'%3E%3Ccircle cx='5.2' cy='2.4' r='1'/%3E%3Ccircle cx='8' cy='2.4' r='1'/%3E%3Ccircle cx='10.8' cy='2.4' r='1'/%3E%3Ccircle cx='5.2' cy='5.2' r='1'/%3E%3Ccircle cx='5.2' cy='8' r='1'/%3E%3Ccircle cx='8' cy='8' r='1'/%3E%3Ccircle cx='10.8' cy='8' r='1'/%3E%3Ccircle cx='10.8' cy='10.8' r='1'/%3E%3Ccircle cx='5.2' cy='13.6' r='1'/%3E%3Ccircle cx='8' cy='13.6' r='1'/%3E%3Ccircle cx='10.8' cy='13.6' r='1'/%3E%3C/g%3E%3C/svg%3E"
+        />
         <title>sesume</title>
+        <!-- AI HERE: mirrors lib/theme.ts so the paint-ready theme exists before the bundle runs. -->
+        <script>
+            try {
+                const pref = localStorage.getItem("sesume.theme");
+                const dark = pref === "dark" || (pref !== "light" && matchMedia("(prefers-color-scheme: dark)").matches);
+                document.documentElement.dataset.theme = dark ? "dark" : "light";
+                document.querySelector('meta[name="theme-color"]').setAttribute("content", dark ? "#0E0E0E" : "#FFFFFF");
+            } catch {
+                const dark = matchMedia("(prefers-color-scheme: dark)").matches;
+                document.documentElement.dataset.theme = dark ? "dark" : "light";
+                document.querySelector('meta[name="theme-color"]').setAttribute("content", dark ? "#0E0E0E" : "#FFFFFF");
+            }
+        </script>
     </head>
     <body>
         <div id="root"></div>
