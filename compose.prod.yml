@@ -24,6 +24,7 @@ services:
     environment:
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
       AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET is required}
+      DATA_KEY: ${DATA_KEY:?DATA_KEY is required}
     ports:
       - "${BACKEND_PORT:-4100}:4100"
     extra_hosts:

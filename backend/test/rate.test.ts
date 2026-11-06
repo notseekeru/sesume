@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { after, test } from "node:test";
 
 process.env.AUTH_SECRET = "test-secret-not-a-real-one";
+process.env.DATA_KEY = Buffer.alloc(32, 7).toString("base64");
 process.env.DATABASE_URL = "postgresql://test:test@127.0.0.1:1/test";
 
 const { app } = await import("../src/index.js");

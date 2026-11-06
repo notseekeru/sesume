@@ -21,6 +21,8 @@ services:
       target: dev
     ports:
       - "${BACKEND_PORT:-4100}:4100"
+    environment:
+      DATA_KEY: ${DATA_KEY:-35ZVKohfkvyCBB3EwkVe4EUORWfgoRL2z3nb83+OLwg=}
     volumes:
       - ./backend:/app
       - /app/node_modules

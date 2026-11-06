@@ -1,9 +1,11 @@
+import { randomUUID } from "node:crypto";
 import type { Context } from "hono";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { DatabaseError } from "pg";
 import { clear, guard, hashPassword, issue, type Session, verifyPassword } from "./auth.js";
+import { open, seal } from "./crypto.js";
 import { pool } from "./db.js";
 import * as latex from "./latex.js";
 import { configFrom, isStub, reviewResume, rewriteLine } from "./llm.js";
@@ -56,6 +58,17 @@ function resumeBody(text: unknown): string {
     if (!saved) throw new Problem(422, "There is no text to save. Paste some, or upload a PDF with selectable text.");
     if ([...saved].length > LIMITS.chars) throw new Problem(422, "That resume is longer than this deployment stores.");
     return saved;
+}
+
+const textAad = (id: string) => `resumes.text:${id}`;
+const reviewAad = (id: string) => `resume_reviews.review:${id}`;
+
+function readReview(value: unknown, id: string): unknown {
+    try {
+        return JSON.parse(open(String(value ?? ""), reviewAad(id)));
+    } catch {
+        return null;
+    }
 }
 
 function reviewJson(review: unknown, createdAt: unknown, fresh: boolean, status: ContentfulStatusCode = 200): Response {
@@ -143,7 +156,7 @@ routes.get("/resumes/:id", guard, async (c) => {
     const id = c.req.param("id");
     const found = UUID.test(id) ? await one(`SELECT ${RESUME_COLS_WITH_TEXT} FROM resumes WHERE id = $1 AND user_id = $2`, [id, c.get("user").id]) : null;
     if (found === null) throw new Problem(404, "Resume not found");
-    return c.json(found);
+    return c.json({ ...found, text: open(String(found.text), textAad(id)) });
 });
 
 routes.post("/resumes/extract", uploadLimit, async (c) => {
@@ -162,22 +175,24 @@ routes.post("/resumes/extract", uploadLimit, async (c) => {
 
 routes.post("/resumes", guard, jsonLimit, async (c) => {
     const input = await body<{ name?: unknown; text?: unknown }>(c);
+    const id = randomUUID();
+    const text = resumeBody(input.text);
     const saved = await one(
-        `INSERT INTO resumes (name, text, user_id)
-SELECT $1, $2, $3 WHERE (SELECT count(*) FROM resumes WHERE user_id = $3) < ${RESUME_CAP}
+        `INSERT INTO resumes (id, name, text, user_id)
+SELECT $1, $2, $3, $4 WHERE (SELECT count(*) FROM resumes WHERE user_id = $4) < ${RESUME_CAP}
 RETURNING ${RESUME_COLS_WITH_TEXT}`,
-        [resumeName(input.name), resumeBody(input.text), c.get("user").id],
+        [id, resumeName(input.name), seal(text, textAad(id)), c.get("user").id],
     );
     if (saved === null) throw new Problem(409, `You have ${RESUME_CAP} resumes. Delete one to make room.`);
-    return c.json(saved, 201);
+    return c.json({ ...saved, text }, 201);
 });
 
 routes.put("/resumes/:id", guard, jsonLimit, async (c) => {
     const id = c.req.param("id");
     const input = await body<{ name?: unknown; text?: unknown }>(c);
-    const saved = UUID.test(id) ? await one(`UPDATE resumes SET name = $2, text = $3, updated_at = now() WHERE id = $1 AND user_id = $4 RETURNING ${RESUME_COLS_WITH_TEXT}`, [id, resumeName(input.name), resumeBody(input.text), c.get("user").id]) : null;
+    const saved = UUID.test(id) ? await one(`UPDATE resumes SET name = $2, text = $3, updated_at = now() WHERE id = $1 AND user_id = $4 RETURNING ${RESUME_COLS_WITH_TEXT}`, [id, resumeName(input.name), seal(resumeBody(input.text), textAad(id)), c.get("user").id]) : null;
     if (saved === null) throw new Problem(404, "Resume not found");
-    return c.json(saved);
+    return c.json({ ...saved, text: open(String(saved.text), textAad(id)) });
 });
 
 routes.delete("/resumes/:id", guard, async (c) => {
@@ -191,27 +206,32 @@ routes.get("/resumes/:id/review", guard, async (c) => {
     const id = c.req.param("id");
     const found = UUID.test(id)
         ? await one(
-              `SELECT rr.review, rr.created_at, rr.source_hash = encode(sha256(convert_to(r.text, 'UTF8')), 'hex') AS fresh
+              `SELECT rr.review, rr.source_hash, rr.created_at, r.text
                FROM resume_reviews rr JOIN resumes r ON r.id = rr.resume_id
                WHERE rr.resume_id = $1 AND r.user_id = $2`,
               [id, c.get("user").id],
           )
         : null;
     if (found === null) return c.json(null);
-    return reviewJson(found.review, found.created_at, Boolean(found.fresh));
+    const fresh = found.source_hash === sourceHash(open(String(found.text), textAad(id)));
+    return reviewJson(readReview(found.review, id), found.created_at, fresh);
 });
 
 routes.post("/resumes/:id/review", guard, async (c) => {
     const id = c.req.param("id");
     const found = UUID.test(id) ? await one("SELECT text FROM resumes WHERE id = $1 AND user_id = $2", [id, c.get("user").id]) : null;
     if (found === null) throw new Problem(404, "Resume not found");
-    const text = String(found.text);
+    const text = open(String(found.text), textAad(id));
     const config = configFrom(c.req.raw.headers);
     if (isStub(config)) throw new Problem(503, "No scoring engine is configured on this deployment, so a review cannot run.");
     const got = await reviewResume(text, config);
     if (got === null) throw new Problem(503, "The reviewer could not read this resume right now. Try again in a moment.");
-    const saved = await one("INSERT INTO resume_reviews (resume_id, source_hash, review) VALUES ($1, $2, $3) ON CONFLICT (resume_id) DO UPDATE SET source_hash = EXCLUDED.source_hash, review = EXCLUDED.review, created_at = now() RETURNING review, created_at", [id, sourceHash(text), got]);
-    return reviewJson(saved?.review, saved?.created_at, true, 201);
+    const saved = await one("INSERT INTO resume_reviews (resume_id, source_hash, review) VALUES ($1, $2, $3) ON CONFLICT (resume_id) DO UPDATE SET source_hash = EXCLUDED.source_hash, review = EXCLUDED.review, created_at = now() RETURNING review, created_at", [
+        id,
+        sourceHash(text),
+        seal(JSON.stringify(got), reviewAad(id)),
+    ]);
+    return reviewJson(readReview(saved?.review, id), saved?.created_at, true, 201);
 });
 
 routes.post("/resumes/:id/review/rewrite", guard, jsonLimit, async (c) => {
@@ -219,27 +239,26 @@ routes.post("/resumes/:id/review/rewrite", guard, jsonLimit, async (c) => {
     const input = await body<{ source?: unknown }>(c);
     const found = UUID.test(id)
         ? await one(
-              `SELECT r.text, rr.review
+              `SELECT r.text, rr.review, rr.source_hash
                FROM resumes r
-               LEFT JOIN resume_reviews rr ON rr.resume_id = r.id AND rr.source_hash = encode(sha256(convert_to(r.text, 'UTF8')), 'hex')
+               LEFT JOIN resume_reviews rr ON rr.resume_id = r.id
                WHERE r.id = $1 AND r.user_id = $2`,
               [id, c.get("user").id],
           )
         : null;
     if (found === null) throw new Problem(404, "Resume not found");
-    const text = String(found.text);
+    const text = open(String(found.text), textAad(id));
     const source = claim(input.source, LINE_MAX);
     if (!source || !quotedBy(text, source)) throw new Problem(422, "That line is not on this resume any more. Re-review it and try again.");
-    if (found.review === null) throw new Problem(409, "Review this resume first: there is no edit to retry.");
-    const current = validReview(found.review);
+    const current = found.review === null || found.source_hash !== sourceHash(text) ? null : validReview(readReview(found.review, id));
     if (current === null) throw new Problem(409, "Review this resume first: there is no edit to retry.");
     const config = configFrom(c.req.raw.headers);
     if (isStub(config)) throw new Problem(503, "No scoring engine is configured on this deployment, so an edit cannot be retried.");
     const got = await rewriteLine(text, source, config);
     if (got === null) throw new Problem(503, "The reviewer could not write a different line right now. Try again in a moment.");
     const stored: ReviewBody = { ...current, rewrites: [{ source, rewrite: got }, ...current.rewrites.filter((item) => item.source !== source)].slice(0, MAX_REWRITES) };
-    const saved = await one("UPDATE resume_reviews SET review = $2 WHERE resume_id = $1 RETURNING review, created_at", [id, stored]);
-    return reviewJson(saved?.review, saved?.created_at, true);
+    const saved = await one("UPDATE resume_reviews SET review = $2 WHERE resume_id = $1 RETURNING review, created_at", [id, seal(JSON.stringify(stored), reviewAad(id))]);
+    return reviewJson(readReview(saved?.review, id), saved?.created_at, true);
 });
 
 routes.post("/review", jsonLimit, async (c) => {
