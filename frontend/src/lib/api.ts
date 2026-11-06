@@ -66,7 +66,6 @@ function llmHeaders(): Record<string, string> {
 export interface ResumeSummary {
     id: string;
     name: string;
-    page_count: number;
     chars: number;
     created_at: string;
     updated_at: string;
@@ -160,7 +159,7 @@ function localFind(id: string): LocalResume {
 }
 
 function localSummary(row: LocalResume): ResumeSummary {
-    return { id: row.id, name: row.name, page_count: 0, chars: row.text.length, created_at: row.created_at, updated_at: row.updated_at };
+    return { id: row.id, name: row.name, chars: row.text.length, created_at: row.created_at, updated_at: row.updated_at };
 }
 
 function localResume(row: LocalResume): Resume {
