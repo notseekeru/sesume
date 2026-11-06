@@ -619,7 +619,9 @@ export default function ResumePage({ email }: { email: string | null }) {
                         <button type="button" className="btn link paste" disabled={busy} onClick={() => setPasting(true)}>
                             Paste resume instead
                         </button>
-                        <p className="hint">Every resume here is stored unencrypted in this deployment's database and is visible only to your account.</p>
+                        <p className="hint">
+                            {email ? "Every resume here is stored unencrypted in this deployment's database and is visible only to your account." : "Every resume here is stored unencrypted in this browser, not on the server, and anyone with this browser can read it. Sign in to keep resumes in your account."}
+                        </p>
                     </div>
                 </main>
             )}
