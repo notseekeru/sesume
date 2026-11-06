@@ -116,6 +116,8 @@ export default function ResumePage({ email }: { email: string | null }) {
     const [future, setFuture] = useState<UndoStep[]>([]);
     const [finished, setFinished] = useState<Set<string>>(new Set());
     const [busy, setBusy] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [notice, setNotice] = useState<string | null>(null);
     const [reviewing, setReviewing] = useState(false);
     const [reviewError, setReviewError] = useState<string | null>(null);
     const [importing, setImporting] = useState(false);
@@ -162,14 +164,18 @@ export default function ResumePage({ email }: { email: string | null }) {
     }, []);
 
     const load = useCallback(async () => {
-        const list = await listResumes();
-        setRows(list);
-        if (list.length) {
-            const full = await getResume(list[0].id);
-            setDraft({ id: full.id, name: full.name, text: full.text });
-            setSaved({ name: full.name, text: full.text });
-        } else {
-            setSaved(null);
+        try {
+            const list = await listResumes();
+            setRows(list);
+            if (list.length) {
+                const full = await getResume(list[0].id);
+                setDraft({ id: full.id, name: full.name, text: full.text });
+                setSaved({ name: full.name, text: full.text });
+            } else {
+                setSaved(null);
+            }
+        } catch (problem) {
+            if (!(problem instanceof ApiError && problem.status === 401)) setError("Could not load your resumes.");
         }
     }, []);
 
@@ -283,8 +289,13 @@ export default function ResumePage({ email }: { email: string | null }) {
 
     async function pick(file: File | undefined) {
         if (!file || busy) return;
-        if (!/\.pdf$/i.test(file.name) && file.type !== "application/pdf") return;
+        if (!/\.pdf$/i.test(file.name) && file.type !== "application/pdf") {
+            setError("That isn't a PDF. Drop a PDF, or paste it instead.");
+            return;
+        }
         setBusy(true);
+        setError(null);
+        setNotice(null);
         try {
             const got = await extractResume(file);
             setDraft({ id: null, name: file.name.replace(/\.pdf$/i, "").slice(0, 80), text: got.text });
@@ -292,6 +303,9 @@ export default function ResumePage({ email }: { email: string | null }) {
             setPasting(true);
             setImporting(false);
             resetHistory();
+            setNotice(got.truncated ? `Read the first ${got.pages} pages. Check the text and fix anything missing. Not saved yet.` : "Read the PDF. Check the text, then Save. Not saved yet.");
+        } catch (problem) {
+            setError(problem instanceof ApiError ? problem.message : "Could not import that PDF.");
         } finally {
             setBusy(false);
         }
@@ -299,8 +313,12 @@ export default function ResumePage({ email }: { email: string | null }) {
 
     async function save() {
         const name = draft.name.trim() || "Untitled resume";
-        if (!draft.text.trim()) return;
+        if (!draft.text.trim()) {
+            setError("A resume needs some text.");
+            return;
+        }
         setBusy(true);
+        setError(null);
         try {
             const saved = draft.id ? await updateResume(draft.id, { name, text: draft.text }) : await createResume({ name, text: draft.text });
             setRows((list) => (draft.id ? list.map((row) => (row.id === saved.id ? saved : row)) : [saved, ...list]));
@@ -308,7 +326,10 @@ export default function ResumePage({ email }: { email: string | null }) {
             setSaved({ name: saved.name, text: saved.text });
             setPasting(false);
             setImporting(false);
+            setNotice(null);
             if (draft.id) await loadReview(saved.id);
+        } catch (problem) {
+            setError(problem instanceof ApiError ? problem.message : "Could not save this resume.");
         } finally {
             setBusy(false);
         }
@@ -316,12 +337,18 @@ export default function ResumePage({ email }: { email: string | null }) {
 
     async function open(id: string) {
         if (draft.id === id) return;
+        setError(null);
+        setNotice(null);
         setImporting(false);
         setPasting(false);
-        const full = await getResume(id);
-        setDraft({ id: full.id, name: full.name, text: full.text });
-        setSaved({ name: full.name, text: full.text });
-        resetHistory();
+        try {
+            const full = await getResume(id);
+            setDraft({ id: full.id, name: full.name, text: full.text });
+            setSaved({ name: full.name, text: full.text });
+            resetHistory();
+        } catch (problem) {
+            setError(problem instanceof ApiError ? problem.message : "Could not open that resume.");
+        }
     }
 
     function startNew() {
@@ -330,6 +357,8 @@ export default function ResumePage({ email }: { email: string | null }) {
         resetHistory();
         setPasting(false);
         setImporting(true);
+        setError(null);
+        setNotice(null);
     }
 
     function discard() {
@@ -339,12 +368,14 @@ export default function ResumePage({ email }: { email: string | null }) {
         resetHistory();
         setPasting(false);
         setImporting(false);
+        setNotice(null);
         void load();
     }
 
     async function remove() {
         if (!draft.id || !confirm(`Delete "${draft.name}"?`)) return;
         setBusy(true);
+        setError(null);
         try {
             await deleteResume(draft.id);
             const rest = rows.filter((row) => row.id !== draft.id);
@@ -354,7 +385,10 @@ export default function ResumePage({ email }: { email: string | null }) {
             resetHistory();
             setPasting(false);
             setImporting(false);
+            setNotice(null);
             if (rest.length) await open(rest[0].id);
+        } catch (problem) {
+            setError(problem instanceof ApiError ? problem.message : "Could not delete that resume.");
         } finally {
             setBusy(false);
         }
@@ -399,6 +433,7 @@ export default function ResumePage({ email }: { email: string | null }) {
         burst.current = 0;
         setHover(null);
         setDraft((current) => ({ ...current, text: toLatex(current.text) }));
+        setNotice("Converted to LaTeX. Check the structure, then Save.");
     }
 
     function updateProvider(next: Provider) {
@@ -472,6 +507,12 @@ export default function ResumePage({ email }: { email: string | null }) {
                     )}
                 </div>
             </header>
+
+            {(error || notice) && (
+                <p className="hint" role={error ? "alert" : "status"}>
+                    {error ?? notice}
+                </p>
+            )}
 
             {editing ? (
                 <div className="columns" ref={columns}>

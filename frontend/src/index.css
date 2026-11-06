@@ -163,19 +163,6 @@ h3 {
     border-radius: 0;
 }
 
-.glyph {
-    flex: none;
-    display: inline-grid;
-    place-items: center;
-    width: 16px;
-    height: 16px;
-    border: 1px solid currentColor;
-    border-radius: var(--r);
-    font-family: var(--font-mono);
-    font-size: var(--t1);
-    line-height: 1;
-}
-
 .btn {
     display: inline-flex;
     align-items: center;
