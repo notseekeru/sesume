@@ -18,12 +18,11 @@ services:
       context: ./backend
       target: prod
     container_name: sesume_backend_prod
+    env_file:
+      - path: ./backend/.env
+        required: false
     environment:
-      PORT: 4100
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
-      LLM_BASE_URL: ${LLM_BASE_URL:-}
-      LLM_MODEL: ${LLM_MODEL:-}
-      LLM_API_KEY: ${LLM_API_KEY:-}
       AUTH_SECRET: ${AUTH_SECRET:?AUTH_SECRET is required}
     ports:
       - "${BACKEND_PORT:-4100}:4100"
