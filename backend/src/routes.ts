@@ -70,6 +70,8 @@ routes.use("*", async (c, next) => {
 });
 
 const jsonLimit = bodyLimit({ maxSize: 512 * 1024, onError: (c) => c.json({ detail: "That request is too large." }, 413) });
+const FILE_TOO_LARGE = `That file is larger than ${LIMITS.bytes / (1024 * 1024)} MB. Trim it down, or paste the text instead.`;
+const uploadLimit = bodyLimit({ maxSize: LIMITS.bytes + 64 * 1024, onError: (c) => c.json({ detail: FILE_TOO_LARGE }, 413) });
 
 routes.onError((error, c) => {
     if (error instanceof Problem) return c.json({ detail: error.message }, error.status);
@@ -141,14 +143,11 @@ routes.get("/resumes/:id", guard, async (c) => {
     return c.json(found);
 });
 
-routes.post("/resumes/extract", async (c) => {
-    const declared = Number(c.req.header("content-length") ?? 0);
-    const limit = (LIMITS.bytes / (1024 * 1024)).toString();
-    if (declared > LIMITS.bytes + 64 * 1024) throw new Problem(413, `That file is larger than ${limit} MB. Trim it down, or paste the text instead.`);
+routes.post("/resumes/extract", uploadLimit, async (c) => {
     const form = await c.req.formData().catch(() => null);
     const file = form?.get("file");
     if (!(file instanceof File)) throw new Problem(422, "Attach a PDF in the file field.");
-    if (file.size > LIMITS.bytes) throw new Problem(413, `That file is larger than ${limit} MB. Trim it down, or paste the text instead.`);
+    if (file.size > LIMITS.bytes) throw new Problem(413, FILE_TOO_LARGE);
     try {
         const got = await extractPdf(new Uint8Array(await file.arrayBuffer()));
         return c.json({ text: got.text, pages: got.pages, truncated: got.truncated });
