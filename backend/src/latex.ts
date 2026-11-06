@@ -1,10 +1,11 @@
 import { spawn, spawnSync } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { availableParallelism, tmpdir } from "node:os";
 import { join } from "node:path";
 
 const COMPILE_TIMEOUT = Number(process.env.LATEX_TIMEOUT ?? 20) * 1000;
-const COMPILE_CONCURRENCY = Number(process.env.LATEX_CONCURRENCY ?? 2);
+// One compile per core but the last, so the server keeps a thread for itself.
+const COMPILE_CONCURRENCY = Number(process.env.LATEX_CONCURRENCY ?? Math.max(2, availableParallelism() - 1));
 const QUEUE_WAIT = Number(process.env.LATEX_QUEUE_WAIT ?? 5) * 1000;
 const MEMORY_MB = Number(process.env.LATEX_MEMORY_MB ?? 192);
 const MAX_OUTPUT = 4000;

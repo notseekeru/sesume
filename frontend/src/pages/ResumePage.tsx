@@ -31,7 +31,6 @@ const MIN_SHARE = 0.16;
 const EMPTY: Draft = { id: null, name: "", text: "" };
 const BURST_MS = 700;
 const MAX_UNDO = 30;
-const DEBOUNCE_MS = 900;
 
 const DEFAULT_LAYOUT: Layout = {
     shown: { editor: true, pdf: true, review: true },
@@ -586,14 +585,14 @@ export default function ResumePage({ email, offline, onRetry }: { email: string 
                                 </>
                             )}
                             {panel === "pdf" &&
-                                (latex ? (
-                                    <Preview text={draft.text} />
+                                (saved && isLatex(saved.text) ? (
+                                    <Preview text={saved.text} stale={dirty} />
                                 ) : (
                                     <>
                                         <div className="pane-bar pane-bar-plain">
                                             <span className="pane-label">Preview</span>
                                         </div>
-                                        <p className="hint pad">Convert the text to LaTeX to see the preview.</p>
+                                        <p className="hint pad">{latex ? "Save to see the preview." : "Convert the text to LaTeX to see the preview."}</p>
                                     </>
                                 ))}
                             {panel === "review" && (
@@ -629,40 +628,39 @@ export default function ResumePage({ email, offline, onRetry }: { email: string 
     );
 }
 
-function Preview({ text }: { text: string }) {
+function Preview({ text, stale }: { text: string; stale: boolean }) {
     const [pdf, setPdf] = useState<Uint8Array | null>(null);
     const [url, setUrl] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [busy, setBusy] = useState(false);
     const current = useRef<string | null>(null);
+    const latest = useRef(0);
 
     useEffect(() => {
-        let alive = true;
+        const id = ++latest.current;
         setBusy(true);
-        const timer = window.setTimeout(async () => {
+        setError(null);
+        void (async () => {
             try {
                 const blob = await compileLatex(text);
-                if (!alive) return;
+                const bytes = new Uint8Array(await blob.arrayBuffer());
+                if (id !== latest.current) return;
                 if (current.current) URL.revokeObjectURL(current.current);
                 current.current = URL.createObjectURL(blob);
                 setUrl(current.current);
-                setPdf(new Uint8Array(await blob.arrayBuffer()));
-                setError(null);
+                setPdf(bytes);
             } catch (problem) {
-                if (!alive) return;
+                if (id !== latest.current) return;
                 setError(problem instanceof ApiError ? problem.message : "Could not compile this document.");
             } finally {
-                if (alive) setBusy(false);
+                if (id === latest.current) setBusy(false);
             }
-        }, DEBOUNCE_MS);
-        return () => {
-            alive = false;
-            window.clearTimeout(timer);
-        };
+        })();
     }, [text]);
 
     useEffect(
         () => () => {
+            latest.current += 1;
             if (current.current) URL.revokeObjectURL(current.current);
         },
         [],
@@ -672,9 +670,9 @@ function Preview({ text }: { text: string }) {
         <>
             <div className="pane-bar">
                 <span className="pane-label">Preview</span>
-                {(busy || error || !pdf) && (
+                {(busy || error || !pdf || stale) && (
                     <span className="state" aria-live="polite">
-                        {busy ? "Compiling..." : error ? "Does not compile" : "Waiting"}
+                        {busy ? "Compiling..." : error ? "Does not compile" : stale ? "Saved version" : "Waiting"}
                     </span>
                 )}
                 {url && !error && (
