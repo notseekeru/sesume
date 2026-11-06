@@ -52,8 +52,9 @@ function resumeName(raw: unknown, fallback = "Untitled resume"): string {
 }
 
 function resumeBody(text: unknown): string {
-    const saved = typeof text === "string" ? sanitize(text, LIMITS.chars) : "";
+    const saved = typeof text === "string" ? sanitize(text, LIMITS.chars + 1) : "";
     if (!saved) throw new Problem(422, "There is no text to save. Paste some, or upload a PDF with selectable text.");
+    if ([...saved].length > LIMITS.chars) throw new Problem(422, "That resume is longer than this deployment stores.");
     return saved;
 }
 

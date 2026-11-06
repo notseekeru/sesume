@@ -58,6 +58,12 @@ test("the stateless pipeline answers without a session", async () => {
     assert.equal(review.status, 503);
 });
 
+test("a save over the character cap is refused instead of cut", async () => {
+    const over = await app.request("/api/resumes", { method: "POST", headers: { ...session(), "content-type": "application/json" }, body: JSON.stringify({ name: "Long", text: "a".repeat(60001) }) });
+    assert.equal(over.status, 422);
+    assert.deepEqual(await over.json(), { detail: "That resume is longer than this deployment stores." });
+});
+
 test("a session cookie is honoured only when it is intact and unexpired", async () => {
     const forged = await app.request("/api/resumes", { headers: session(`${mintToken(USER).slice(0, -2)}xx`) });
     const expired = await app.request("/api/resumes", { headers: session(mintToken(USER, Date.now() - 1000)) });
