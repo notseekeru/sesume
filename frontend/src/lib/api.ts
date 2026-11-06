@@ -34,7 +34,7 @@ async function adoptLocal(): Promise<void> {
         try {
             await request<Resume>("/resumes", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: row.name, text: row.text }) });
         } catch {
-            return;
+            continue;
         }
         localWrite(localRead().filter((item) => item.id !== row.id));
     }
