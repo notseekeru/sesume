@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Route, Routes } from "react-router-dom";
-import { me, setAccount } from "./lib/api";
+import { ApiError, me, setAccount } from "./lib/api";
 import LoginPage from "./pages/LoginPage";
 import NotFound from "./pages/NotFound";
 import ResumePage from "./pages/ResumePage";
@@ -14,9 +14,9 @@ export default function App() {
                 setEmail(account.email);
                 setAccount(account.email);
             },
-            () => {
+            (error: unknown) => {
                 setEmail(null);
-                setAccount("");
+                setAccount(error instanceof ApiError && error.status === 401 ? null : "");
             },
         );
     }, []);
