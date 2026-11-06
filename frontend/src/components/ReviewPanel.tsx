@@ -12,6 +12,8 @@ export interface ReviewPanelProps {
     dirty: boolean;
     saved: boolean;
     provider: Provider;
+    storedKey: boolean;
+    account: boolean;
     onProvider: (provider: Provider) => void;
     onReview: () => void;
     onApply: (source: string, rewrite: string) => boolean;
@@ -22,7 +24,7 @@ export interface ReviewPanelProps {
     suggestions: Suggestion[];
 }
 
-export function ReviewPanel({ review, busy, error, dirty, saved, provider, onProvider, onReview, onApply, onRetry, onDismiss, onFocusLine, onHover, suggestions }: ReviewPanelProps) {
+export function ReviewPanel({ review, busy, error, dirty, saved, provider, storedKey, account, onProvider, onReview, onApply, onRetry, onDismiss, onFocusLine, onHover, suggestions }: ReviewPanelProps) {
     const open = suggestions;
 
     return (
@@ -111,10 +113,10 @@ export function ReviewPanel({ review, busy, error, dirty, saved, provider, onPro
 
             <details className="provider">
                 <summary>Reviewer provider</summary>
-                <p className="hint">The key stays in this browser tab.</p>
+                <p className="hint">{account ? "The key is encrypted and stored on your account." : "The key stays in this tab and is gone on reload."}</p>
                 <input className="field" aria-label="Base URL" placeholder="Base URL, e.g. https://api.openai.com/v1" maxLength={PROVIDER_MAX.baseUrl} value={provider.baseUrl} onChange={(event) => onProvider({ ...provider, baseUrl: event.target.value })} />
                 <input className="field" aria-label="Model" placeholder="Model" maxLength={PROVIDER_MAX.model} value={provider.model} onChange={(event) => onProvider({ ...provider, model: event.target.value })} />
-                <input className="field" type="password" aria-label="API key" placeholder="API key" maxLength={PROVIDER_MAX.key} value={provider.key} onChange={(event) => onProvider({ ...provider, key: event.target.value })} />
+                <input className="field" type="password" aria-label="API key" placeholder={storedKey && !provider.key ? "Saved, type to replace" : "API key"} maxLength={PROVIDER_MAX.key} value={provider.key} onChange={(event) => onProvider({ ...provider, key: event.target.value })} />
             </details>
         </div>
     );

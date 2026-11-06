@@ -5,7 +5,7 @@ import { Logo } from "../components/Logo";
 import { PdfView } from "../components/PdfView";
 import { ReviewPanel } from "../components/ReviewPanel";
 import { ThemeToggle } from "../components/ThemeToggle";
-import { ApiError, compileLatex, createResume, deleteResume, extractResume, getResume, getResumeReview, listResumes, loadProvider, logout, type Provider, type ResumeReview, type ResumeSummary, retryRewrite, reviewResume, saveProvider, updateResume } from "../lib/api";
+import { ApiError, compileLatex, createResume, currentProvider, deleteResume, extractResume, getResume, getResumeReview, keyOnServer, listResumes, loadProvider, logout, type Provider, type ResumeReview, type ResumeSummary, retryRewrite, reviewResume, saveProvider, updateResume } from "../lib/api";
 import { isLatex } from "../lib/latex";
 import { replaceLine, type Suggestion } from "../lib/resumeText";
 import { toLatex } from "../lib/toLatex";
@@ -138,7 +138,9 @@ export default function ResumePage({ email, offline, onRetry }: { email: string 
     const [dropping, setDropping] = useState(false);
     const [focus, setFocus] = useState<{ quote: string; n: number } | null>(null);
     const [hover, setHover] = useState<Suggestion | null>(null);
-    const [provider, setProvider] = useState<Provider>(() => loadProvider());
+    const [provider, setProvider] = useState<Provider>({ baseUrl: "", model: "", key: "" });
+    const [storedKey, setStoredKey] = useState(false);
+    const providerTimer = useRef(0);
     const [layout, setLayout] = useState<Layout>(loadLayout);
     // AI HERE: compact mode reuses the pane toggles as tabs and keeps the choice in memory, not storage. Upgrade path: persist the mobile pane.
     const [tab, setTab] = useState<Panel>(() => PANELS.find((panel) => layout.shown[panel]) ?? "editor");
@@ -463,9 +465,21 @@ export default function ResumePage({ email, offline, onRetry }: { email: string 
         setNotice("Converted to LaTeX. Check the structure, then Save.");
     }
 
+    useEffect(() => {
+        void loadProvider().then(() => {
+            setProvider(currentProvider());
+            setStoredKey(keyOnServer());
+        });
+    }, []);
+
+    useEffect(() => () => window.clearTimeout(providerTimer.current), []);
+
     function updateProvider(next: Provider) {
         setProvider(next);
-        saveProvider(next);
+        window.clearTimeout(providerTimer.current);
+        providerTimer.current = window.setTimeout(() => {
+            void saveProvider(next).then(() => setStoredKey(keyOnServer()));
+        }, 600);
     }
 
     const signOut = async () => {
@@ -635,6 +649,8 @@ export default function ResumePage({ email, offline, onRetry }: { email: string 
                                             dirty={dirty}
                                             saved={draft.id !== null}
                                             provider={provider}
+                                            storedKey={storedKey}
+                                            account={email !== null}
                                             onProvider={updateProvider}
                                             onReview={() => void reviewCurrent()}
                                             onApply={applyRewrite}
