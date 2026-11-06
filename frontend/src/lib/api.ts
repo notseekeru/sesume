@@ -65,32 +65,48 @@ function cut(value: unknown, max: number): string {
     return typeof value === "string" ? value.trim().slice(0, max) : "";
 }
 
-const PROVIDER_KEY = "sesume.provider";
+interface StoredProvider {
+    baseUrl: string;
+    model: string;
+    hasKey: boolean;
+}
 
-export function loadProvider(): Provider {
+let provider: Provider = { baseUrl: "", model: "", key: "" };
+let kept = false;
+
+export const currentProvider = (): Provider => provider;
+export const keyOnServer = (): boolean => kept;
+
+export async function loadProvider(): Promise<void> {
+    provider = { baseUrl: "", model: "", key: "" };
+    kept = false;
+    if (!(await signedIn())) return;
     try {
-        const raw = sessionStorage.getItem(PROVIDER_KEY);
-        const parsed = raw ? (JSON.parse(raw) as Partial<Provider>) : {};
-        return { baseUrl: cut(parsed.baseUrl, PROVIDER_MAX.baseUrl), model: cut(parsed.model, PROVIDER_MAX.model), key: cut(parsed.key, PROVIDER_MAX.key) };
+        const got = await request<StoredProvider>("/provider");
+        provider = { baseUrl: got.baseUrl, model: got.model, key: "" };
+        kept = got.hasKey;
     } catch {
-        return { baseUrl: "", model: "", key: "" };
+        return;
     }
 }
 
-export function saveProvider(provider: Provider): void {
+export async function saveProvider(next: Provider): Promise<void> {
+    provider = { baseUrl: cut(next.baseUrl, PROVIDER_MAX.baseUrl), model: cut(next.model, PROVIDER_MAX.model), key: cut(next.key, PROVIDER_MAX.key) };
+    if (!(await signedIn())) return;
     try {
-        sessionStorage.setItem(PROVIDER_KEY, JSON.stringify({ baseUrl: cut(provider.baseUrl, PROVIDER_MAX.baseUrl), model: cut(provider.model, PROVIDER_MAX.model), key: cut(provider.key, PROVIDER_MAX.key) }));
+        const got = await request<StoredProvider>("/provider", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(provider) });
+        provider = { baseUrl: got.baseUrl, model: got.model, key: "" };
+        kept = got.hasKey;
     } catch {
         return;
     }
 }
 
 function llmHeaders(): Record<string, string> {
-    const provider = loadProvider();
     return {
-        ...(provider.baseUrl.trim() ? { "x-llm-base-url": provider.baseUrl.trim() } : {}),
-        ...(provider.model.trim() ? { "x-llm-model": provider.model.trim() } : {}),
-        ...(provider.key.trim() ? { "x-llm-key": provider.key.trim() } : {}),
+        ...(provider.baseUrl ? { "x-llm-base-url": provider.baseUrl } : {}),
+        ...(provider.model ? { "x-llm-model": provider.model } : {}),
+        ...(provider.key ? { "x-llm-key": provider.key } : {}),
     };
 }
 

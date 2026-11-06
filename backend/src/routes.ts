@@ -62,6 +62,26 @@ function resumeBody(text: unknown): string {
 
 const textAad = (id: string) => `resumes.text:${id}`;
 const reviewAad = (id: string) => `resume_reviews.review:${id}`;
+const providerAad = (id: string, field: string) => `provider_configs.${field}:${id}`;
+const PROVIDER_CAP = { baseUrl: 500, model: 200, key: 500 };
+
+function cut(value: unknown, max: number): string {
+    return typeof value === "string" ? value.trim().slice(0, max) : "";
+}
+
+async function storedProvider(userId: string): Promise<Row | null> {
+    return one("SELECT base_url, model, api_key FROM provider_configs WHERE user_id = $1", [userId]);
+}
+
+async function providerHeaders(userId: string, headers: Headers): Promise<Headers> {
+    const row = await storedProvider(userId);
+    if (row === null) return headers;
+    const out = new Headers(headers);
+    out.set("x-llm-base-url", open(String(row.base_url), providerAad(userId, "base_url")));
+    out.set("x-llm-model", open(String(row.model), providerAad(userId, "model")));
+    out.set("x-llm-key", open(String(row.api_key), providerAad(userId, "api_key")));
+    return out;
+}
 
 function readReview(value: unknown, id: string): unknown {
     try {
@@ -152,6 +172,39 @@ routes.get("/auth/me", guard, async (c) => {
 
 routes.get("/resumes", guard, async (c) => c.json(await rows(`SELECT ${RESUME_COLS} FROM resumes WHERE user_id = $1 ORDER BY created_at DESC`, [c.get("user").id])));
 
+routes.get("/provider", guard, async (c) => {
+    const userId = c.get("user").id;
+    const row = await storedProvider(userId);
+    if (row === null) return c.json({ baseUrl: "", model: "", hasKey: false });
+    return c.json({
+        baseUrl: open(String(row.base_url), providerAad(userId, "base_url")),
+        model: open(String(row.model), providerAad(userId, "model")),
+        hasKey: open(String(row.api_key), providerAad(userId, "api_key")) !== "",
+    });
+});
+
+routes.put("/provider", guard, jsonLimit, async (c) => {
+    const userId = c.get("user").id;
+    const input = await body<{ baseUrl?: unknown; model?: unknown; key?: unknown }>(c);
+    const baseUrl = cut(input.baseUrl, PROVIDER_CAP.baseUrl);
+    const model = cut(input.model, PROVIDER_CAP.model);
+    const key = cut(input.key, PROVIDER_CAP.key);
+    const existing = await storedProvider(userId);
+    const sealed = key ? seal(key, providerAad(userId, "api_key")) : existing === null ? "" : String(existing.api_key);
+    await one(
+        `INSERT INTO provider_configs (user_id, base_url, model, api_key) VALUES ($1, $2, $3, $4)
+         ON CONFLICT (user_id) DO UPDATE SET base_url = EXCLUDED.base_url, model = EXCLUDED.model, api_key = EXCLUDED.api_key, updated_at = now()
+         RETURNING user_id`,
+        [userId, seal(baseUrl, providerAad(userId, "base_url")), seal(model, providerAad(userId, "model")), sealed],
+    );
+    return c.json({ baseUrl, model, hasKey: sealed !== "" });
+});
+
+routes.delete("/provider", guard, async (c) => {
+    await sql("DELETE FROM provider_configs WHERE user_id = $1", [c.get("user").id]);
+    return c.body(null, 204);
+});
+
 routes.get("/resumes/:id", guard, async (c) => {
     const id = c.req.param("id");
     const found = UUID.test(id) ? await one(`SELECT ${RESUME_COLS_WITH_TEXT} FROM resumes WHERE id = $1 AND user_id = $2`, [id, c.get("user").id]) : null;
@@ -222,7 +275,7 @@ routes.post("/resumes/:id/review", guard, async (c) => {
     const found = UUID.test(id) ? await one("SELECT text FROM resumes WHERE id = $1 AND user_id = $2", [id, c.get("user").id]) : null;
     if (found === null) throw new Problem(404, "Resume not found");
     const text = open(String(found.text), textAad(id));
-    const config = configFrom(c.req.raw.headers);
+    const config = configFrom(await providerHeaders(c.get("user").id, c.req.raw.headers));
     if (isStub(config)) throw new Problem(503, "No scoring engine is configured on this deployment, so a review cannot run.");
     const got = await reviewResume(text, config);
     if (got === null) throw new Problem(503, "The reviewer could not read this resume right now. Try again in a moment.");
@@ -252,7 +305,7 @@ routes.post("/resumes/:id/review/rewrite", guard, jsonLimit, async (c) => {
     if (!source || !quotedBy(text, source)) throw new Problem(422, "That line is not on this resume any more. Re-review it and try again.");
     const current = found.review === null || found.source_hash !== sourceHash(text) ? null : validReview(readReview(found.review, id));
     if (current === null) throw new Problem(409, "Review this resume first: there is no edit to retry.");
-    const config = configFrom(c.req.raw.headers);
+    const config = configFrom(await providerHeaders(c.get("user").id, c.req.raw.headers));
     if (isStub(config)) throw new Problem(503, "No scoring engine is configured on this deployment, so an edit cannot be retried.");
     const got = await rewriteLine(text, source, config);
     if (got === null) throw new Problem(503, "The reviewer could not write a different line right now. Try again in a moment.");
