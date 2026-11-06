@@ -117,14 +117,14 @@ export interface ResumeReview {
 }
 
 let account = false;
-let unlock: (value: boolean) => void = () => undefined;
+let settle: (value: boolean) => void = () => undefined;
 const sessionReady = new Promise<boolean>((resolve) => {
-    unlock = resolve;
+    settle = resolve;
 });
 
 export function setAccount(email: string | null): void {
     account = email !== null;
-    unlock(account);
+    settle(account);
 }
 
 interface LocalResume {
@@ -138,7 +138,6 @@ interface LocalResume {
 }
 
 const LOCAL_KEY = "sesume.resumes";
-const REWRITES = 3;
 
 function localRead(): LocalResume[] {
     try {
@@ -229,7 +228,7 @@ export async function retryRewrite(id: string, source: string): Promise<ResumeRe
     const row = localFind(id);
     if (row.review === null) throw new ApiError(409, "Review this resume first: there is no edit to retry.");
     const got = await request<ReviewRewrite>("/review/rewrite", { method: "POST", headers: { "content-type": "application/json", ...llmHeaders() }, body: JSON.stringify({ text: row.text, source }) });
-    const review = { ...row.review, rewrites: [got, ...row.review.rewrites.filter((item) => item.source !== source)].slice(0, REWRITES) };
+    const review = { ...row.review, rewrites: [got, ...row.review.rewrites.filter((item) => item.source !== source)] };
     localSave({ ...row, review });
     return review;
 }

@@ -85,8 +85,7 @@ stopping whichever compose project holds them. `make psql` opens the dev
 database. `make clean` deletes that database's volume. The target list is in
 the `Makefile`, the services in `compose.yml`.
 
-Anyone who reaches the app can register an account; sessions are an HttpOnly
-cookie signed with `AUTH_SECRET`.
+Open registration; an account keeps resumes in Postgres instead of the browser.
 
 The `prod` targets build without dev dependencies and the backend runs `dist/`,
 not `tsx`. They serve on 8080 (nginx) and 4100, and there is no database
