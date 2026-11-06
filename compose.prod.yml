@@ -1,0 +1,42 @@
+services:
+  frontend:
+    build:
+      context: ./frontend
+      target: prod
+    container_name: sesume_frontend_prod
+    ports:
+      - "${FRONTEND_PORT:-8080}:8080"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - app
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+      target: prod
+    container_name: sesume_backend_prod
+    environment:
+      PORT: 4100
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+      LLM_MODEL: ${LLM_MODEL:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+    ports:
+      - "${BACKEND_PORT:-4100}:4100"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:4100/api/healthz >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - app
+    restart: unless-stopped
+
+networks:
+  app:
