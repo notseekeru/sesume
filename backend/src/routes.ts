@@ -7,6 +7,7 @@ import { clear, guard, hashPassword, issue, type Session, verifyPassword } from 
 import { pool } from "./db.js";
 import * as latex from "./latex.js";
 import { configFrom, isStub, reviewResume, rewriteLine } from "./llm.js";
+import { limit } from "./rate.js";
 import { ExtractError, extractPdf, LIMITS, sanitize, TOO_LARGE } from "./resumes.js";
 import { claim, LINE_MAX, MAX_REWRITES, quotedBy, type ReviewBody, readsAt, sourceHash, validReview } from "./review.js";
 
@@ -68,6 +69,7 @@ routes.use("*", async (c, next) => {
     await next();
     console.info(`${c.req.method} ${c.req.path} ${c.res.status} ${Math.round(performance.now() - started)}ms`);
 });
+routes.use("*", limit);
 
 const jsonLimit = bodyLimit({ maxSize: 512 * 1024, onError: (c) => c.json({ detail: "That request is too large." }, 413) });
 const uploadLimit = bodyLimit({ maxSize: LIMITS.bytes + 64 * 1024, onError: (c) => c.json({ detail: TOO_LARGE }, 413) });
