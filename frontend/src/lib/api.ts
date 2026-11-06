@@ -24,9 +24,33 @@ export interface Account {
 }
 
 export const me = () => request<Account>("/auth/me");
-export const login = (email: string, password: string) => request<Account>("/auth/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email, password }) });
-export const register = (email: string, password: string) => request<Account>("/auth/register", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email, password }) });
 export const logout = () => request<void>("/auth/logout", { method: "POST" });
+
+// AI HERE: resumes move to the account, the reviews written for them do not: the server only stores a
+// review it generated itself. Ceiling: a guest's review is dropped at the first sign-in. Upgrade path: an
+// endpoint that accepts a client-held review once it can be tied to the text it graded.
+async function adoptLocal(): Promise<void> {
+    for (const row of localRead()) {
+        try {
+            await request<Resume>("/resumes", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: row.name, text: row.text }) });
+        } catch {
+            return;
+        }
+        localWrite(localRead().filter((item) => item.id !== row.id));
+    }
+}
+
+export async function login(email: string, password: string): Promise<Account> {
+    const account = await request<Account>("/auth/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email, password }) });
+    await adoptLocal();
+    return account;
+}
+
+export async function register(email: string, password: string): Promise<Account> {
+    const account = await request<Account>("/auth/register", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email, password }) });
+    await adoptLocal();
+    return account;
+}
 
 export interface Provider {
     baseUrl: string;
