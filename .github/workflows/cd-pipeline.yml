@@ -94,6 +94,7 @@ jobs:
         run: |
           docker run -d --name smoke --network host \
             -e DATABASE_URL \
+            -e AUTH_SECRET \
             "$IMAGE:$SHA"
           for _ in $(seq 1 30); do
             if curl -fsS "http://127.0.0.1:${{ matrix.service.port }}${{ matrix.service.health }}" >/dev/null; then
