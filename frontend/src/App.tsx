@@ -5,47 +5,35 @@ import LoginPage from "./pages/LoginPage";
 import NotFound from "./pages/NotFound";
 import ResumePage from "./pages/ResumePage";
 
-type Boot = { state: "loading" } | { state: "down" } | { state: "ready"; email: string | null };
-
 export default function App() {
-    const [boot, setBoot] = useState<Boot>({ state: "loading" });
+    const [email, setEmail] = useState<string | null>(null);
+    const [offline, setOffline] = useState(false);
 
-    const check = useCallback(() => {
-        setBoot({ state: "loading" });
-        void me().then(
-            (account) => {
-                setAccount(account.email);
-                setBoot({ state: "ready", email: account.email });
-            },
-            (error: unknown) => {
-                if (!(error instanceof ApiError && error.status === 401)) {
-                    setBoot({ state: "down" });
-                    return;
-                }
+    const check = useCallback(async () => {
+        try {
+            const account = await me();
+            setAccount(account.email);
+            setEmail(account.email);
+            setOffline(false);
+        } catch (error) {
+            if (error instanceof ApiError && error.status === 401) {
                 setAccount(null);
-                setBoot({ state: "ready", email: null });
-            },
-        );
+                setEmail(null);
+                setOffline(false);
+                return;
+            }
+            setAccount("");
+            setOffline(true);
+        }
     }, []);
 
-    useEffect(check, [check]);
-
-    if (boot.state === "loading") return null;
-    if (boot.state === "down")
-        return (
-            <main className="welcome">
-                <div className="welcome-card">
-                    <p className="hint">Cannot reach the server. Nothing saved has been lost.</p>
-                    <button type="button" className="btn" onClick={check}>
-                        Retry
-                    </button>
-                </div>
-            </main>
-        );
+    useEffect(() => {
+        void check();
+    }, [check]);
 
     return (
         <Routes>
-            <Route path="/" element={<ResumePage email={boot.email} />} />
+            <Route path="/" element={<ResumePage email={email} offline={offline} onRetry={() => void check()} />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="*" element={<NotFound />} />
         </Routes>
