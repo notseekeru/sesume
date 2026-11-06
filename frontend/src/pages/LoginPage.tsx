@@ -28,11 +28,11 @@ export default function LoginPage() {
                 <label className="hint" htmlFor="email">
                     Email
                 </label>
-                <input id="email" className="field" type="email" autoComplete="email" required value={email} onChange={(event) => setEmail(event.target.value)} />
+                <input id="email" className="field" type="email" autoComplete="email" required maxLength={254} value={email} onChange={(event) => setEmail(event.target.value)} />
                 <label className="hint" htmlFor="password">
                     Password
                 </label>
-                <input id="password" className="field" type="password" autoComplete={creating ? "new-password" : "current-password"} required minLength={creating ? 8 : undefined} value={password} onChange={(event) => setPassword(event.target.value)} />
+                <input id="password" className="field" type="password" autoComplete={creating ? "new-password" : "current-password"} required minLength={creating ? 8 : undefined} maxLength={200} value={password} onChange={(event) => setPassword(event.target.value)} />
                 {error && (
                     <p className="alert" role="alert">
                         {error}

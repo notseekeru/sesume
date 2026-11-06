@@ -31,6 +31,9 @@ const MIN_SHARE = 0.16;
 const EMPTY: Draft = { id: null, name: "", text: "" };
 const BURST_MS = 700;
 const MAX_UNDO = 30;
+// AI HERE: mirrors RESUME_MAX_CHARS, which the backend owns. Ceiling: a deployment that raises the env
+// lets the editor stop before the server does. Upgrade path: publish the limit with the app.
+const MAX_CHARS = 60000;
 const ZOOM_FIT = 100;
 const ZOOM_MIN = 25;
 const ZOOM_MAX = 300;
@@ -251,6 +254,10 @@ export default function ResumePage({ email, offline, onRetry }: { email: string 
     }
 
     function editText(text: string) {
+        if (text.length > MAX_CHARS) {
+            setNotice(`A resume holds up to ${MAX_CHARS.toLocaleString()} characters. Shorten it to keep editing.`);
+            return;
+        }
         const now = Date.now();
         if (now - burst.current > BURST_MS) remember();
         burst.current = now;
@@ -432,6 +439,10 @@ export default function ResumePage({ email, offline, onRetry }: { email: string 
     function applyRewrite(source: string, rewrite: string) {
         const next = replaceLine(draft.text, source, rewrite);
         if (next === null) return false;
+        if (next.length > MAX_CHARS) {
+            setNotice(`That edit would pass the ${MAX_CHARS.toLocaleString()} character limit.`);
+            return false;
+        }
         remember(source);
         burst.current = 0;
         setHover(null);
@@ -440,10 +451,15 @@ export default function ResumePage({ email, offline, onRetry }: { email: string 
     }
 
     function convertToLatex() {
+        const next = toLatex(draft.text);
+        if (next.length > MAX_CHARS) {
+            setNotice(`Converting adds the LaTeX preamble and would pass the ${MAX_CHARS.toLocaleString()} character limit. Remove some text first.`);
+            return;
+        }
         remember();
         burst.current = 0;
         setHover(null);
-        setDraft((current) => ({ ...current, text: toLatex(current.text) }));
+        setDraft((current) => ({ ...current, text: next }));
         setNotice("Converted to LaTeX. Check the structure, then Save.");
     }
 

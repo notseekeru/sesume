@@ -58,13 +58,20 @@ export interface Provider {
     key: string;
 }
 
+export const PROVIDER_MAX = { baseUrl: 500, model: 200, key: 500 };
+const MAX_RESUMES = 50;
+
+function cut(value: unknown, max: number): string {
+    return typeof value === "string" ? value.trim().slice(0, max) : "";
+}
+
 const PROVIDER_KEY = "sesume.provider";
 
 export function loadProvider(): Provider {
     try {
         const raw = sessionStorage.getItem(PROVIDER_KEY);
         const parsed = raw ? (JSON.parse(raw) as Partial<Provider>) : {};
-        return { baseUrl: parsed.baseUrl ?? "", model: parsed.model ?? "", key: parsed.key ?? "" };
+        return { baseUrl: cut(parsed.baseUrl, PROVIDER_MAX.baseUrl), model: cut(parsed.model, PROVIDER_MAX.model), key: cut(parsed.key, PROVIDER_MAX.key) };
     } catch {
         return { baseUrl: "", model: "", key: "" };
     }
@@ -72,7 +79,7 @@ export function loadProvider(): Provider {
 
 export function saveProvider(provider: Provider): void {
     try {
-        sessionStorage.setItem(PROVIDER_KEY, JSON.stringify(provider));
+        sessionStorage.setItem(PROVIDER_KEY, JSON.stringify({ baseUrl: cut(provider.baseUrl, PROVIDER_MAX.baseUrl), model: cut(provider.model, PROVIDER_MAX.model), key: cut(provider.key, PROVIDER_MAX.key) }));
     } catch {
         return;
     }
@@ -219,6 +226,7 @@ export async function extractResume(file: File): Promise<ResumeExtract> {
 
 export async function createResume(input: { name: string; text: string }): Promise<Resume> {
     if (await signedIn()) return request<Resume>("/resumes", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(input) });
+    if (localRead().length >= MAX_RESUMES) throw new ApiError(409, `You have ${MAX_RESUMES} resumes. Delete one to make room.`);
     const now = new Date().toISOString();
     return localSave({ id: uid(), name: input.name, text: input.text, reviewed: null, review: null, created_at: now, updated_at: now });
 }
