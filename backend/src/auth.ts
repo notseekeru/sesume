@@ -45,7 +45,7 @@ export function clear(c: Context): void {
     deleteCookie(c, COOKIE, { path: "/" });
 }
 
-function read(c: Context): { id: string } | null {
+export function viewer(c: Context): { id: string } | null {
     const raw = getCookie(c, COOKIE);
     if (!raw) return null;
     const [id, expires, sig] = raw.split(".");
@@ -58,7 +58,7 @@ function read(c: Context): { id: string } | null {
 }
 
 export const guard: MiddlewareHandler<Session> = async (c, next) => {
-    const user = read(c);
+    const user = viewer(c);
     if (user === null) return c.json({ detail: "An account is required." }, 401);
     c.set("user", user);
     await next();
