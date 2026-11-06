@@ -31,6 +31,14 @@ const MIN_SHARE = 0.16;
 const EMPTY: Draft = { id: null, name: "", text: "" };
 const BURST_MS = 700;
 const MAX_UNDO = 30;
+const ZOOM_FIT = 100;
+const ZOOM_MIN = 25;
+const ZOOM_MAX = 300;
+const ZOOM_STEP = 25;
+
+function clampZoom(percent: number): number {
+    return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, percent));
+}
 
 const DEFAULT_LAYOUT: Layout = {
     shown: { editor: true, pdf: true, review: true },
@@ -60,8 +68,11 @@ if (import.meta.env.DEV) {
         shortcut(press({ ctrlKey: true, key: "z" }), true, false, false).action === "undo",
         shortcut(press({ ctrlKey: true, key: "Z", shiftKey: true }), true, false, false).action === "redo",
         shortcut(press({ ctrlKey: true, key: "z" }), false, false, false).prevent === false,
+        clampZoom(ZOOM_MIN - ZOOM_STEP) === ZOOM_MIN,
+        clampZoom(ZOOM_MAX + ZOOM_STEP) === ZOOM_MAX,
+        clampZoom(ZOOM_FIT) === ZOOM_FIT,
     ];
-    if (checks.includes(false)) console.error("shortcuts: self-check failed");
+    if (checks.includes(false)) console.error("self-check failed");
 }
 
 interface UndoStep {
@@ -586,7 +597,7 @@ export default function ResumePage({ email, offline, onRetry }: { email: string 
                             )}
                             {panel === "pdf" &&
                                 (saved && isLatex(saved.text) ? (
-                                    <Preview text={saved.text} stale={dirty} />
+                                    <Preview key={draft.id ?? "new"} text={saved.text} stale={dirty} />
                                 ) : (
                                     <>
                                         <div className="pane-bar pane-bar-plain">
@@ -633,8 +644,11 @@ function Preview({ text, stale }: { text: string; stale: boolean }) {
     const [url, setUrl] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [busy, setBusy] = useState(false);
+    const [zoom, setZoom] = useState(ZOOM_FIT);
     const current = useRef<string | null>(null);
     const latest = useRef(0);
+    const zoomBy = useCallback((dir: number) => setZoom((percent) => clampZoom(percent + dir * ZOOM_STEP)), []);
+    const fit = useCallback(() => setZoom(ZOOM_FIT), []);
 
     useEffect(() => {
         const id = ++latest.current;
@@ -670,6 +684,17 @@ function Preview({ text, stale }: { text: string; stale: boolean }) {
         <>
             <div className="pane-bar">
                 <span className="pane-label">Preview</span>
+                <div className="zoom">
+                    <button type="button" className="btn quiet" aria-label="Zoom out" disabled={zoom <= ZOOM_MIN} onClick={() => zoomBy(-1)}>
+                        -
+                    </button>
+                    <button type="button" className="btn quiet fit" aria-label={`Zoom ${zoom}%, fit to width`} onClick={fit}>
+                        {zoom}%
+                    </button>
+                    <button type="button" className="btn quiet" aria-label="Zoom in" disabled={zoom >= ZOOM_MAX} onClick={() => zoomBy(1)}>
+                        +
+                    </button>
+                </div>
                 {(busy || error || !pdf || stale) && (
                     <span className="state" aria-live="polite">
                         {busy ? "Compiling..." : error ? "Does not compile" : stale ? "Saved version" : "Waiting"}
@@ -681,7 +706,7 @@ function Preview({ text, stale }: { text: string; stale: boolean }) {
                     </a>
                 )}
             </div>
-            <div className="pane-body fill">{error ? <pre className="log">{error}</pre> : pdf ? <PdfView data={pdf} /> : null}</div>
+            <div className="pane-body fill">{error ? <pre className="log">{error}</pre> : pdf ? <PdfView data={pdf} zoom={zoom} onZoom={zoomBy} onReset={fit} /> : null}</div>
         </>
     );
 }

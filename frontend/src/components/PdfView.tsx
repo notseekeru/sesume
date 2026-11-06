@@ -1,10 +1,14 @@
 import type { PDFDocumentLoadingTask } from "pdfjs-dist";
 import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
-import { useEffect, useRef, useState } from "react";
+import { type CSSProperties, type KeyboardEvent, useEffect, useRef, useState } from "react";
 
 const SETTLE_MS = 250;
+const PIXEL_RATIO_CAP = 2;
 
-export function PdfView({ data }: { data: Uint8Array }) {
+// AI HERE: pages rasterize at fit width and zoom scales them with CSS. Ceiling: past 100% the bitmap is
+// interpolated. Upgrade path: re-render the visible pages at the zoomed scale once the gesture settles.
+export function PdfView({ data, zoom, onZoom, onReset }: { data: Uint8Array; zoom: number; onZoom: (dir: number) => void; onReset: () => void }) {
+    const view = useRef<HTMLDivElement>(null);
     const host = useRef<HTMLDivElement>(null);
     const [width, setWidth] = useState(0);
     const [error, setError] = useState<string | null>(null);
@@ -26,6 +30,18 @@ export function PdfView({ data }: { data: Uint8Array }) {
     }, []);
 
     useEffect(() => {
+        const node = view.current;
+        if (!node) return;
+        const wheel = (event: WheelEvent) => {
+            if (!event.ctrlKey && !event.metaKey) return;
+            event.preventDefault();
+            onZoom(event.deltaY < 0 ? 1 : -1);
+        };
+        node.addEventListener("wheel", wheel, { passive: false });
+        return () => node.removeEventListener("wheel", wheel);
+    }, [onZoom]);
+
+    useEffect(() => {
         const node = host.current;
         if (!node || width === 0) return;
         let alive = true;
@@ -38,7 +54,7 @@ export function PdfView({ data }: { data: Uint8Array }) {
             GlobalWorkerOptions.workerSrc = workerUrl;
             task = getDocument({ data: new Uint8Array(data) });
             const doc = await task.promise;
-            const ratio = Math.min(2, window.devicePixelRatio || 1);
+            const ratio = Math.min(PIXEL_RATIO_CAP, window.devicePixelRatio || 1);
             for (let index = 1; index <= doc.numPages; index += 1) {
                 if (!alive) break;
                 const page = await doc.getPage(index);
@@ -48,7 +64,6 @@ export function PdfView({ data }: { data: Uint8Array }) {
                 canvas.className = "pdf-page";
                 canvas.width = Math.floor(viewport.width);
                 canvas.height = Math.floor(viewport.height);
-                canvas.style.width = "100%";
                 await page.render({ canvas, viewport }).promise;
                 page.cleanup();
                 if (!alive) break;
@@ -65,10 +80,24 @@ export function PdfView({ data }: { data: Uint8Array }) {
         };
     }, [data, width]);
 
+    function keys(event: KeyboardEvent<HTMLDivElement>) {
+        if (!event.ctrlKey && !event.metaKey) return;
+        if (event.key === "0") {
+            event.preventDefault();
+            onReset();
+            return;
+        }
+        const dir = event.key === "+" || event.key === "=" ? 1 : event.key === "-" ? -1 : 0;
+        if (dir === 0) return;
+        event.preventDefault();
+        onZoom(dir);
+    }
+
     return (
-        <div className="pdf-view">
-            <div className="pdf-pages" ref={host} />
+        // biome-ignore lint/a11y/noNoninteractiveTabindex: a scrollable region has to take focus before its keyboard zoom shortcuts can fire
+        <section className="pdf-view" ref={view} aria-label="PDF preview" tabIndex={0} onKeyDown={keys}>
+            <div className="pdf-pages" ref={host} style={{ "--page-width": `${(width * zoom) / 100}px` } as CSSProperties} />
             {error && <p className="alert pad">{error}</p>}
-        </div>
+        </section>
     );
 }
