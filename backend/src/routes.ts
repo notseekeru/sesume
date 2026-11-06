@@ -10,7 +10,7 @@ import { configFrom, isStub, reviewResume, rewriteLine } from "./llm.js";
 import { ExtractError, extractPdf, LIMITS, sanitize, TOO_LARGE } from "./resumes.js";
 import { claim, LINE_MAX, MAX_REWRITES, quotedBy, type ReviewBody, readsAt, sourceHash, validReview } from "./review.js";
 
-const RESUME_COLS = "id::text, name, created_at, updated_at, length(text) AS chars";
+const RESUME_COLS = "id::text, name, created_at, updated_at";
 const RESUME_COLS_WITH_TEXT = `${RESUME_COLS}, text`;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 

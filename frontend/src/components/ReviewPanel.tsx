@@ -31,7 +31,6 @@ export function ReviewPanel({ review, busy, error, dirty, saved, provider, onPro
                 <button type="button" className="btn primary" disabled={!saved || busy || dirty} onClick={onReview}>
                     {busy ? "Reviewing..." : review ? "Re-review" : "Review resume"}
                 </button>
-                {(!saved || dirty) && <span className="hint">Save before reviewing: the reviewer reads the saved text.</span>}
             </div>
 
             {error && (

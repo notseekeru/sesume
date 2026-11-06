@@ -563,8 +563,7 @@ export default function ResumePage({ email, offline, onRetry }: { email: string 
                                                     void pick(event.dataTransfer.files?.[0]);
                                                 }}
                                             >
-                                                <Logo className="logo-lg" />
-                                                <span className="dropzone-title">{dropping ? "Drop it" : busy ? "Reading the PDF..." : "Drop a PDF here, or click to browse"}</span>
+                                                <span className="dropzone-title">{dropping ? "Drop it" : busy ? "Reading the PDF..." : "Drop PDF"}</span>
                                                 <input
                                                     type="file"
                                                     className="sr"
@@ -580,7 +579,6 @@ export default function ResumePage({ email, offline, onRetry }: { email: string 
                                             <button type="button" className="btn link paste" disabled={busy} onClick={() => setPasting(true)}>
                                                 Paste resume instead
                                             </button>
-                                            <p className="hint">{email ? "Every resume here is stored unencrypted in this deployment's database and is visible only to your account." : "Every resume here is stored unencrypted in this browser, not on the server."}</p>
                                         </div>
                                     ) : (
                                         <CodeEditor value={draft.text} latex={latex} marks={review?.lines ?? []} suggestions={suggestions} ghost={hover} focus={focus} placeholder="Paste your resume here..." onChange={editText} />
