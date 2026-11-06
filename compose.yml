@@ -11,13 +11,9 @@ services:
   backend:
     build: ./backend
     container_name: sesume_backend
+    env_file: ./backend/.env
     environment:
-      PORT: 4100
       DATABASE_URL: postgresql://${POSTGRES_USER:-sesume}:${POSTGRES_PASSWORD:-sesume}@postgres:5432/${POSTGRES_DB:-sesume}
-      LLM_BASE_URL: ${LLM_BASE_URL:-}
-      LLM_MODEL: ${LLM_MODEL:-}
-      LLM_API_KEY: ${LLM_API_KEY:-}
-      AUTH_SECRET: ${AUTH_SECRET:-dev-only-not-a-secret-change-me}
     depends_on:
       postgres:
         condition: service_healthy

@@ -80,10 +80,11 @@ make up     # postgres, backend on 4100, frontend on 5373
 ```
 
 Ports and database credentials default to 5373, 4100, 5433 and `sesume`; copy
-`.env.example` to `.env` to change them. `make up` frees those ports first,
-stopping whichever compose project holds them. `make psql` opens the dev
-database. `make clean` deletes that database's volume. The target list is in
-the `Makefile`, the services in `compose.yml`.
+`.env.example` to `.env` and `backend/.env.example` to `backend/.env` to change
+them. `make up` frees those ports first, stopping whichever compose project
+holds them. `make psql` opens the dev database. `make clean` deletes that
+database's volume. The target list is in the `Makefile`, the services in
+`compose.yml`.
 
 Open registration; an account keeps resumes in Postgres instead of the browser.
 
