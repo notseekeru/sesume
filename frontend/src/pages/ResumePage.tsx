@@ -43,11 +43,11 @@ const COMPACT_QUERY = "(max-width: 900px)";
 type ShortcutEvent = { metaKey: boolean; ctrlKey: boolean; key: string; shiftKey: boolean };
 type ShortcutIntent = { action: "save" | "undo" | "redo" | null; prevent: boolean };
 
-function shortcut(event: ShortcutEvent, editing: boolean, dirty: boolean, busy: boolean): ShortcutIntent {
+function shortcut(event: ShortcutEvent, showEditor: boolean, dirty: boolean, busy: boolean): ShortcutIntent {
     if (!(event.metaKey || event.ctrlKey)) return { action: null, prevent: false };
     const pressed = event.key.toLowerCase();
-    if (pressed === "s") return { action: editing && dirty && !busy ? "save" : null, prevent: editing };
-    if (!editing || pressed !== "z") return { action: null, prevent: false };
+    if (pressed === "s") return { action: dirty && !busy ? "save" : null, prevent: true };
+    if (!showEditor || pressed !== "z") return { action: null, prevent: false };
     return { action: event.shiftKey ? "redo" : "undo", prevent: true };
 }
 
@@ -55,6 +55,7 @@ if (import.meta.env.DEV) {
     const press = (init: Partial<ShortcutEvent>): ShortcutEvent => ({ metaKey: false, ctrlKey: false, key: "", shiftKey: false, ...init });
     const checks = [
         shortcut(press({ ctrlKey: true, key: "s" }), true, true, false).action === "save",
+        shortcut(press({ ctrlKey: true, key: "s" }), false, true, false).action === "save",
         shortcut(press({ metaKey: true, key: "s" }), true, false, false).action === null,
         shortcut(press({ ctrlKey: true, key: "s" }), true, false, false).prevent,
         shortcut(press({ ctrlKey: true, key: "z" }), true, false, false).action === "undo",
@@ -131,6 +132,8 @@ export default function ResumePage({ email, offline, onRetry }: { email: string 
     const compact = useCompact();
     const burst = useRef(0);
     const columns = useRef<HTMLDivElement>(null);
+    const draftRef = useRef<Draft>(EMPTY);
+    draftRef.current = draft;
 
     const dirty = draft.id === null ? Boolean(draft.name.trim() || draft.text.trim()) : saved !== null && (draft.name !== saved.name || draft.text !== saved.text);
     const latex = isLatex(draft.text);
@@ -169,11 +172,12 @@ export default function ResumePage({ email, offline, onRetry }: { email: string 
             const list = await listResumes();
             setError(null);
             setRows(list);
-            if (list.length) {
+            const idle = draftRef.current.id === null && draftRef.current.text === "";
+            if (list.length && idle) {
                 const full = await getResume(list[0].id);
                 setDraft({ id: full.id, name: full.name, text: full.text });
                 setSaved({ name: full.name, text: full.text });
-            } else {
+            } else if (!list.length) {
                 setSaved(null);
             }
         } catch (problem) {
@@ -362,6 +366,7 @@ export default function ResumePage({ email, offline, onRetry }: { email: string 
     function discard() {
         if (dirty && !confirm("Discard these unsaved changes?")) return;
         setDraft(EMPTY);
+        draftRef.current = EMPTY;
         setSaved(null);
         resetHistory();
         setPasting(false);
