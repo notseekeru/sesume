@@ -13,6 +13,7 @@ import { claim, LINE_MAX, MAX_REWRITES, quotedBy, type ReviewBody, readsAt, sour
 
 const RESUME_COLS = "id::text, name, created_at, updated_at";
 const RESUME_COLS_WITH_TEXT = `${RESUME_COLS}, text`;
+const RESUME_CAP = 50;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 class Problem extends Error {
@@ -160,7 +161,13 @@ routes.post("/resumes/extract", uploadLimit, async (c) => {
 
 routes.post("/resumes", guard, jsonLimit, async (c) => {
     const input = await body<{ name?: unknown; text?: unknown }>(c);
-    const saved = await one(`INSERT INTO resumes (name, text, user_id) VALUES ($1, $2, $3) RETURNING ${RESUME_COLS_WITH_TEXT}`, [resumeName(input.name), resumeBody(input.text), c.get("user").id]);
+    const saved = await one(
+        `INSERT INTO resumes (name, text, user_id)
+SELECT $1, $2, $3 WHERE (SELECT count(*) FROM resumes WHERE user_id = $3) < ${RESUME_CAP}
+RETURNING ${RESUME_COLS_WITH_TEXT}`,
+        [resumeName(input.name), resumeBody(input.text), c.get("user").id],
+    );
+    if (saved === null) throw new Problem(409, `You have ${RESUME_CAP} resumes. Delete one to make room.`);
     return c.json(saved, 201);
 });
 

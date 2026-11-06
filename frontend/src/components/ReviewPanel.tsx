@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { Provider, ResumeReview, ReviewLevel } from "../lib/api";
+import { PROVIDER_MAX, type Provider, type ResumeReview, type ReviewLevel } from "../lib/api";
 import type { Suggestion } from "../lib/resumeText";
 
 const LEVEL_LABEL: Record<string, string> = { intern: "Intern", junior: "Junior", mid: "Mid-level", senior: "Senior", staff: "Staff", principal: "Principal" };
@@ -112,9 +112,9 @@ export function ReviewPanel({ review, busy, error, dirty, saved, provider, onPro
             <details className="provider">
                 <summary>Reviewer provider</summary>
                 <p className="hint">The key stays in this browser tab.</p>
-                <input className="field" aria-label="Base URL" placeholder="Base URL, e.g. https://api.openai.com/v1" value={provider.baseUrl} onChange={(event) => onProvider({ ...provider, baseUrl: event.target.value })} />
-                <input className="field" aria-label="Model" placeholder="Model" value={provider.model} onChange={(event) => onProvider({ ...provider, model: event.target.value })} />
-                <input className="field" type="password" aria-label="API key" placeholder="API key" value={provider.key} onChange={(event) => onProvider({ ...provider, key: event.target.value })} />
+                <input className="field" aria-label="Base URL" placeholder="Base URL, e.g. https://api.openai.com/v1" maxLength={PROVIDER_MAX.baseUrl} value={provider.baseUrl} onChange={(event) => onProvider({ ...provider, baseUrl: event.target.value })} />
+                <input className="field" aria-label="Model" placeholder="Model" maxLength={PROVIDER_MAX.model} value={provider.model} onChange={(event) => onProvider({ ...provider, model: event.target.value })} />
+                <input className="field" type="password" aria-label="API key" placeholder="API key" maxLength={PROVIDER_MAX.key} value={provider.key} onChange={(event) => onProvider({ ...provider, key: event.target.value })} />
             </details>
         </div>
     );
