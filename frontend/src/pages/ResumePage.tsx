@@ -43,11 +43,11 @@ const COMPACT_QUERY = "(max-width: 900px)";
 type ShortcutEvent = { metaKey: boolean; ctrlKey: boolean; key: string; shiftKey: boolean };
 type ShortcutIntent = { action: "save" | "undo" | "redo" | null; prevent: boolean };
 
-function shortcut(event: ShortcutEvent, editing: boolean, dirty: boolean, busy: boolean): ShortcutIntent {
+function shortcut(event: ShortcutEvent, showEditor: boolean, dirty: boolean, busy: boolean): ShortcutIntent {
     if (!(event.metaKey || event.ctrlKey)) return { action: null, prevent: false };
     const pressed = event.key.toLowerCase();
-    if (pressed === "s") return { action: editing && dirty && !busy ? "save" : null, prevent: editing };
-    if (!editing || pressed !== "z") return { action: null, prevent: false };
+    if (pressed === "s") return { action: dirty && !busy ? "save" : null, prevent: true };
+    if (!showEditor || pressed !== "z") return { action: null, prevent: false };
     return { action: event.shiftKey ? "redo" : "undo", prevent: true };
 }
 
@@ -55,6 +55,7 @@ if (import.meta.env.DEV) {
     const press = (init: Partial<ShortcutEvent>): ShortcutEvent => ({ metaKey: false, ctrlKey: false, key: "", shiftKey: false, ...init });
     const checks = [
         shortcut(press({ ctrlKey: true, key: "s" }), true, true, false).action === "save",
+        shortcut(press({ ctrlKey: true, key: "s" }), false, true, false).action === "save",
         shortcut(press({ metaKey: true, key: "s" }), true, false, false).action === null,
         shortcut(press({ ctrlKey: true, key: "s" }), true, false, false).prevent,
         shortcut(press({ ctrlKey: true, key: "z" }), true, false, false).action === "undo",
@@ -107,7 +108,7 @@ function normalize(widths: Record<Panel, number>, shown: Record<Panel, boolean>)
     return next;
 }
 
-export default function ResumePage({ email }: { email: string | null }) {
+export default function ResumePage({ email, offline, onRetry }: { email: string | null; offline: boolean; onRetry: () => void }) {
     const [rows, setRows] = useState<ResumeSummary[]>([]);
     const [draft, setDraft] = useState<Draft>(EMPTY);
     const [saved, setSaved] = useState<{ name: string; text: string } | null>(null);
@@ -120,7 +121,6 @@ export default function ResumePage({ email }: { email: string | null }) {
     const [notice, setNotice] = useState<string | null>(null);
     const [reviewing, setReviewing] = useState(false);
     const [reviewError, setReviewError] = useState<string | null>(null);
-    const [importing, setImporting] = useState(false);
     const [pasting, setPasting] = useState(false);
     const [dropping, setDropping] = useState(false);
     const [focus, setFocus] = useState<{ quote: string; n: number } | null>(null);
@@ -132,12 +132,15 @@ export default function ResumePage({ email }: { email: string | null }) {
     const compact = useCompact();
     const burst = useRef(0);
     const columns = useRef<HTMLDivElement>(null);
+    const draftRef = useRef<Draft>(EMPTY);
+    draftRef.current = draft;
 
-    const editing = draft.id !== null || pasting || importing;
     const dirty = draft.id === null ? Boolean(draft.name.trim() || draft.text.trim()) : saved !== null && (draft.name !== saved.name || draft.text !== saved.text);
     const latex = isLatex(draft.text);
     const suggestions = useMemo(() => (review?.rewrites ?? []).filter((line) => !finished.has(line.source)), [review, finished]);
     const visible = compact ? [tab] : PANELS.filter((panel) => layout.shown[panel]);
+    const showEditor = visible.includes("editor");
+    const empty = !pasting && draft.text.trim() === "";
     const mass = visible.reduce((sum, panel) => sum + layout.widths[panel], 0) || 1;
     const share = (panel: Panel) => (layout.widths[panel] / mass) * 100;
 
@@ -164,20 +167,23 @@ export default function ResumePage({ email }: { email: string | null }) {
     }, []);
 
     const load = useCallback(async () => {
+        if (offline) return;
         try {
             const list = await listResumes();
+            setError(null);
             setRows(list);
-            if (list.length) {
+            const idle = draftRef.current.id === null && draftRef.current.text === "";
+            if (list.length && idle) {
                 const full = await getResume(list[0].id);
                 setDraft({ id: full.id, name: full.name, text: full.text });
                 setSaved({ name: full.name, text: full.text });
-            } else {
+            } else if (!list.length) {
                 setSaved(null);
             }
         } catch (problem) {
             if (!(problem instanceof ApiError && problem.status === 401)) setError("Could not load your resumes.");
         }
-    }, []);
+    }, [offline]);
 
     useEffect(() => {
         void load();
@@ -275,7 +281,7 @@ export default function ResumePage({ email }: { email: string | null }) {
 
     useEffect(() => {
         function key(event: KeyboardEvent) {
-            const { action, prevent } = shortcut(event, editing, dirty, busy);
+            const { action, prevent } = shortcut(event, showEditor, dirty, busy);
             if (!prevent) return;
             if ((action === "undo" || action === "redo") && (event.target as HTMLElement | null)?.tagName === "INPUT") return;
             event.preventDefault();
@@ -301,7 +307,6 @@ export default function ResumePage({ email }: { email: string | null }) {
             setDraft({ id: null, name: file.name.replace(/\.pdf$/i, "").slice(0, 80), text: got.text });
             setSaved(null);
             setPasting(true);
-            setImporting(false);
             resetHistory();
             setNotice(got.truncated ? `Read the first ${got.pages} pages. Check the text and fix anything missing. Not saved yet.` : "Read the PDF. Check the text, then Save. Not saved yet.");
         } catch (problem) {
@@ -325,7 +330,6 @@ export default function ResumePage({ email }: { email: string | null }) {
             setDraft({ id: saved.id, name: saved.name, text: saved.text });
             setSaved({ name: saved.name, text: saved.text });
             setPasting(false);
-            setImporting(false);
             setNotice(null);
             if (draft.id) await loadReview(saved.id);
         } catch (problem) {
@@ -339,7 +343,6 @@ export default function ResumePage({ email }: { email: string | null }) {
         if (draft.id === id) return;
         setError(null);
         setNotice(null);
-        setImporting(false);
         setPasting(false);
         try {
             const full = await getResume(id);
@@ -356,7 +359,6 @@ export default function ResumePage({ email }: { email: string | null }) {
         setSaved(null);
         resetHistory();
         setPasting(false);
-        setImporting(true);
         setError(null);
         setNotice(null);
     }
@@ -364,10 +366,10 @@ export default function ResumePage({ email }: { email: string | null }) {
     function discard() {
         if (dirty && !confirm("Discard these unsaved changes?")) return;
         setDraft(EMPTY);
+        draftRef.current = EMPTY;
         setSaved(null);
         resetHistory();
         setPasting(false);
-        setImporting(false);
         setNotice(null);
         void load();
     }
@@ -384,7 +386,6 @@ export default function ResumePage({ email }: { email: string | null }) {
             setSaved(null);
             resetHistory();
             setPasting(false);
-            setImporting(false);
             setNotice(null);
             if (rest.length) await open(rest[0].id);
         } catch (problem) {
@@ -465,19 +466,17 @@ export default function ResumePage({ email }: { email: string | null }) {
                         </button>
                     )}
                 </nav>
-                {editing && (
-                    <fieldset className="seg" aria-label="Panes">
-                        <legend className="sr">Panes</legend>
-                        {PANELS.map((panel) => {
-                            const on = compact ? tab === panel : layout.shown[panel];
-                            return (
-                                <button key={panel} type="button" className={on ? "on" : ""} aria-pressed={on} onClick={() => togglePanel(panel)}>
-                                    {PANEL_LABEL[panel]}
-                                </button>
-                            );
-                        })}
-                    </fieldset>
-                )}
+                <fieldset className="seg" aria-label="Panes">
+                    <legend className="sr">Panes</legend>
+                    {PANELS.map((panel) => {
+                        const on = compact ? tab === panel : layout.shown[panel];
+                        return (
+                            <button key={panel} type="button" className={on ? "on" : ""} aria-pressed={on} onClick={() => togglePanel(panel)}>
+                                {PANEL_LABEL[panel]}
+                            </button>
+                        );
+                    })}
+                </fieldset>
                 <div className="actions">
                     <ThemeToggle />
                     {email ? (
@@ -494,13 +493,11 @@ export default function ResumePage({ email }: { email: string | null }) {
                             Delete
                         </button>
                     ) : (
-                        editing && (
-                            <button type="button" className="btn discard" disabled={busy} onClick={discard}>
-                                {dirty ? "Discard" : "Cancel"}
-                            </button>
-                        )
+                        <button type="button" className="btn discard" disabled={busy} onClick={discard}>
+                            {dirty ? "Discard" : "Cancel"}
+                        </button>
                     )}
-                    {!visible.includes("editor") && editing && (
+                    {!showEditor && (
                         <button type="button" className="btn primary save" disabled={busy || !dirty} title="Save (Ctrl/Cmd+S)" aria-keyshortcuts="Control+S Meta+S" onClick={() => void save()}>
                             {busy ? "Saving..." : "Save"}
                         </button>
@@ -508,121 +505,126 @@ export default function ResumePage({ email }: { email: string | null }) {
                 </div>
             </header>
 
-            {(error || notice) && (
+            {offline && (
+                <p className="hint" role="alert">
+                    Cannot reach the server. Nothing saved has been lost.{" "}
+                    <button type="button" className="btn link" onClick={onRetry}>
+                        Retry
+                    </button>
+                </p>
+            )}
+
+            {(error || notice) && !offline && (
                 <p className="hint" role={error ? "alert" : "status"}>
                     {error ?? notice}
                 </p>
             )}
 
-            {editing ? (
-                <div className="columns" ref={columns}>
-                    {visible.map((panel, index) => (
-                        <Fragment key={panel}>
-                            {index > 0 && <div className="splitter" aria-hidden="true" onPointerDown={(event) => startResize(event, visible[index - 1], panel)} />}
-                            <section className="pane" style={{ "--share": `${share(panel)}%` } as CSSProperties}>
-                                {panel === "editor" && (
-                                    <>
-                                        <div className="pane-bar">
-                                            <input className="name" value={draft.name} maxLength={80} placeholder="Untitled resume" aria-label="Resume name" onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} />
-                                            <div className="actions">
-                                                {!latex && draft.text.trim() !== "" && (
-                                                    <button type="button" className="btn quiet" onClick={convertToLatex}>
-                                                        Convert to LaTeX
-                                                    </button>
-                                                )}
-                                                <button type="button" className="btn quiet" disabled={busy || past.length === 0} title="Undo (Ctrl/Cmd+Z)" aria-keyshortcuts="Control+Z Meta+Z" onClick={undo}>
-                                                    Undo
+            <div className="columns" ref={columns}>
+                {visible.map((panel, index) => (
+                    <Fragment key={panel}>
+                        {index > 0 && <div className="splitter" aria-hidden="true" onPointerDown={(event) => startResize(event, visible[index - 1], panel)} />}
+                        <section className="pane" style={{ "--share": `${share(panel)}%` } as CSSProperties}>
+                            {panel === "editor" && (
+                                <>
+                                    <div className="pane-bar">
+                                        <input className="name" value={draft.name} maxLength={80} placeholder="Untitled resume" aria-label="Resume name" onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} />
+                                        <div className="actions">
+                                            {!latex && draft.text.trim() !== "" && (
+                                                <button type="button" className="btn quiet" onClick={convertToLatex}>
+                                                    Convert to LaTeX
                                                 </button>
-                                                <button type="button" className="btn quiet" disabled={busy || future.length === 0} title="Redo (Ctrl/Cmd+Shift+Z)" aria-keyshortcuts="Control+Shift+Z Meta+Shift+Z" onClick={redo}>
-                                                    Redo
-                                                </button>
-                                                <button type="button" className="btn primary save" disabled={busy || !dirty} title="Save (Ctrl/Cmd+S)" aria-keyshortcuts="Control+S Meta+S" onClick={() => void save()}>
-                                                    {busy ? "Saving..." : "Save"}
-                                                </button>
-                                            </div>
+                                            )}
+                                            <button type="button" className="btn quiet" disabled={busy || past.length === 0} title="Undo (Ctrl/Cmd+Z)" aria-keyshortcuts="Control+Z Meta+Z" onClick={undo}>
+                                                Undo
+                                            </button>
+                                            <button type="button" className="btn quiet" disabled={busy || future.length === 0} title="Redo (Ctrl/Cmd+Shift+Z)" aria-keyshortcuts="Control+Shift+Z Meta+Shift+Z" onClick={redo}>
+                                                Redo
+                                            </button>
+                                            <button type="button" className="btn primary save" disabled={busy || !dirty} title="Save (Ctrl/Cmd+S)" aria-keyshortcuts="Control+S Meta+S" onClick={() => void save()}>
+                                                {busy ? "Saving..." : "Save"}
+                                            </button>
                                         </div>
-                                        <CodeEditor value={draft.text} latex={latex} marks={review?.lines ?? []} suggestions={suggestions} ghost={hover} focus={focus} placeholder="Paste your resume here..." onChange={editText} />
-                                    </>
-                                )}
-                                {panel === "pdf" &&
-                                    (latex ? (
-                                        <Preview text={draft.text} />
+                                    </div>
+                                    {empty ? (
+                                        <div className="pane-body pane-empty">
+                                            <label
+                                                className={dropping ? "dropzone dropping" : "dropzone"}
+                                                onDragOver={(event) => {
+                                                    event.preventDefault();
+                                                    setDropping(true);
+                                                }}
+                                                onDragLeave={(event) => {
+                                                    if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDropping(false);
+                                                }}
+                                                onDrop={(event) => {
+                                                    event.preventDefault();
+                                                    setDropping(false);
+                                                    void pick(event.dataTransfer.files?.[0]);
+                                                }}
+                                            >
+                                                <span className="dropzone-title">{dropping ? "Drop it" : busy ? "Reading the PDF..." : "Drop PDF"}</span>
+                                                <input
+                                                    type="file"
+                                                    className="sr"
+                                                    accept="application/pdf,.pdf"
+                                                    disabled={busy}
+                                                    onChange={(event) => {
+                                                        const file = event.target.files?.[0];
+                                                        event.target.value = "";
+                                                        void pick(file);
+                                                    }}
+                                                />
+                                            </label>
+                                            <button type="button" className="btn link paste" disabled={busy} onClick={() => setPasting(true)}>
+                                                Paste resume instead
+                                            </button>
+                                        </div>
                                     ) : (
-                                        <>
-                                            <div className="pane-bar pane-bar-plain">
-                                                <span className="pane-label">Preview</span>
-                                            </div>
-                                            <p className="hint pad">Convert the text to LaTeX to see the preview.</p>
-                                        </>
-                                    ))}
-                                {panel === "review" && (
+                                        <CodeEditor value={draft.text} latex={latex} marks={review?.lines ?? []} suggestions={suggestions} ghost={hover} focus={focus} placeholder="Paste your resume here..." onChange={editText} />
+                                    )}
+                                </>
+                            )}
+                            {panel === "pdf" &&
+                                (latex ? (
+                                    <Preview text={draft.text} />
+                                ) : (
                                     <>
                                         <div className="pane-bar pane-bar-plain">
-                                            <span className="pane-label">Review</span>
+                                            <span className="pane-label">Preview</span>
                                         </div>
-                                        <div className="pane-body">
-                                            <ReviewPanel
-                                                review={review}
-                                                busy={reviewing}
-                                                error={reviewError}
-                                                dirty={dirty}
-                                                saved={draft.id !== null}
-                                                provider={provider}
-                                                onProvider={updateProvider}
-                                                onReview={() => void reviewCurrent()}
-                                                onApply={applyRewrite}
-                                                onRetry={(source) => void retryEdit(source)}
-                                                onDismiss={(source) => finish(source, true)}
-                                                onFocusLine={(quote) => setFocus((current) => ({ quote, n: (current?.n ?? 0) + 1 }))}
-                                                onHover={setHover}
-                                                suggestions={suggestions}
-                                            />
-                                        </div>
+                                        <p className="hint pad">Convert the text to LaTeX to see the preview.</p>
                                     </>
-                                )}
-                            </section>
-                        </Fragment>
-                    ))}
-                </div>
-            ) : (
-                <main className="welcome">
-                    <div className="welcome-card">
-                        <label
-                            className={dropping ? "dropzone dropping" : "dropzone"}
-                            onDragOver={(event) => {
-                                event.preventDefault();
-                                setDropping(true);
-                            }}
-                            onDragLeave={(event) => {
-                                if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDropping(false);
-                            }}
-                            onDrop={(event) => {
-                                event.preventDefault();
-                                setDropping(false);
-                                void pick(event.dataTransfer.files?.[0]);
-                            }}
-                        >
-                            <Logo className="logo-lg" />
-                            <span className="dropzone-title">{dropping ? "Drop it" : busy ? "Reading the PDF..." : "Drop a PDF here, or click to browse"}</span>
-                            <input
-                                type="file"
-                                className="sr"
-                                accept="application/pdf,.pdf"
-                                disabled={busy}
-                                onChange={(event) => {
-                                    const file = event.target.files?.[0];
-                                    event.target.value = "";
-                                    void pick(file);
-                                }}
-                            />
-                        </label>
-                        <button type="button" className="btn link paste" disabled={busy} onClick={() => setPasting(true)}>
-                            Paste resume instead
-                        </button>
-                        <p className="hint">Every resume here is stored unencrypted in this deployment's database and is visible only to your account.</p>
-                    </div>
-                </main>
-            )}
+                                ))}
+                            {panel === "review" && (
+                                <>
+                                    <div className="pane-bar pane-bar-plain">
+                                        <span className="pane-label">Review</span>
+                                    </div>
+                                    <div className="pane-body">
+                                        <ReviewPanel
+                                            review={review}
+                                            busy={reviewing}
+                                            error={reviewError}
+                                            dirty={dirty}
+                                            saved={draft.id !== null}
+                                            provider={provider}
+                                            onProvider={updateProvider}
+                                            onReview={() => void reviewCurrent()}
+                                            onApply={applyRewrite}
+                                            onRetry={(source) => void retryEdit(source)}
+                                            onDismiss={(source) => finish(source, true)}
+                                            onFocusLine={(quote) => setFocus((current) => ({ quote, n: (current?.n ?? 0) + 1 }))}
+                                            onHover={setHover}
+                                            suggestions={suggestions}
+                                        />
+                                    </div>
+                                </>
+                            )}
+                        </section>
+                    </Fragment>
+                ))}
+            </div>
         </div>
     );
 }

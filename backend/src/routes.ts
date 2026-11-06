@@ -7,10 +7,10 @@ import { clear, guard, hashPassword, issue, type Session, verifyPassword } from 
 import { pool } from "./db.js";
 import * as latex from "./latex.js";
 import { configFrom, isStub, reviewResume, rewriteLine } from "./llm.js";
-import { ExtractError, extractPdf, LIMITS, sanitize } from "./resumes.js";
+import { ExtractError, extractPdf, LIMITS, sanitize, TOO_LARGE } from "./resumes.js";
 import { claim, LINE_MAX, MAX_REWRITES, quotedBy, type ReviewBody, readsAt, sourceHash, validReview } from "./review.js";
 
-const RESUME_COLS = "id::text, name, page_count, created_at, updated_at, length(text) AS chars";
+const RESUME_COLS = "id::text, name, created_at, updated_at";
 const RESUME_COLS_WITH_TEXT = `${RESUME_COLS}, text`;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -70,6 +70,7 @@ routes.use("*", async (c, next) => {
 });
 
 const jsonLimit = bodyLimit({ maxSize: 512 * 1024, onError: (c) => c.json({ detail: "That request is too large." }, 413) });
+const uploadLimit = bodyLimit({ maxSize: LIMITS.bytes + 64 * 1024, onError: (c) => c.json({ detail: TOO_LARGE }, 413) });
 
 routes.onError((error, c) => {
     if (error instanceof Problem) return c.json({ detail: error.message }, error.status);
@@ -141,14 +142,11 @@ routes.get("/resumes/:id", guard, async (c) => {
     return c.json(found);
 });
 
-routes.post("/resumes/extract", async (c) => {
-    const declared = Number(c.req.header("content-length") ?? 0);
-    const limit = (LIMITS.bytes / (1024 * 1024)).toString();
-    if (declared > LIMITS.bytes + 64 * 1024) throw new Problem(413, `That file is larger than ${limit} MB. Trim it down, or paste the text instead.`);
+routes.post("/resumes/extract", uploadLimit, async (c) => {
     const form = await c.req.formData().catch(() => null);
     const file = form?.get("file");
     if (!(file instanceof File)) throw new Problem(422, "Attach a PDF in the file field.");
-    if (file.size > LIMITS.bytes) throw new Problem(413, `That file is larger than ${limit} MB. Trim it down, or paste the text instead.`);
+    if (file.size > LIMITS.bytes) throw new Problem(413, TOO_LARGE);
     try {
         const got = await extractPdf(new Uint8Array(await file.arrayBuffer()));
         return c.json({ text: got.text, pages: got.pages, truncated: got.truncated });

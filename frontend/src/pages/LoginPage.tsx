@@ -24,6 +24,7 @@ export default function LoginPage() {
     return (
         <main className="welcome auth">
             <form className="welcome-card auth-card" onSubmit={(event) => void submit(event)}>
+                <h1>{creating ? "Create an account" : "Sign in"}</h1>
                 <label className="hint" htmlFor="email">
                     Email
                 </label>

@@ -600,6 +600,14 @@ body.resizing {
     padding: 0;
 }
 
+.pane-empty {
+    display: flex;
+    flex-direction: column;
+    justify-content: safe center;
+    gap: var(--s3);
+    padding: var(--s4);
+}
+
 .editor {
     position: relative;
     flex: 1;
@@ -1102,7 +1110,7 @@ h1 {
 }
 
 .paste {
-    justify-self: center;
+    align-self: center;
 }
 
 @media (min-width: 720px) {

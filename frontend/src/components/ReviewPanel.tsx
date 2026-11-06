@@ -31,7 +31,6 @@ export function ReviewPanel({ review, busy, error, dirty, saved, provider, onPro
                 <button type="button" className="btn primary" disabled={!saved || busy || dirty} onClick={onReview}>
                     {busy ? "Reviewing..." : review ? "Re-review" : "Review resume"}
                 </button>
-                {!saved ? <span className="hint">Save the resume first: the reviewer reads the saved text.</span> : dirty && <span className="hint">Save before reviewing: the reviewer reads the saved text.</span>}
             </div>
 
             {error && (
@@ -42,7 +41,7 @@ export function ReviewPanel({ review, busy, error, dirty, saved, provider, onPro
 
             {review === null ? (
                 <div className="empty">
-                    <p className="hint">No review yet. One review grades the page against every band and writes the edits that raise it.</p>
+                    <p className="hint">No review yet.</p>
                 </div>
             ) : (
                 <>
@@ -53,7 +52,7 @@ export function ReviewPanel({ review, busy, error, dirty, saved, provider, onPro
                     <section className="block">
                         <h3>Rewrites</h3>
                         {open.length === 0 ? (
-                            <p className="hint">No rewrites open. A re-review writes them again.</p>
+                            <p className="hint">No rewrites open.</p>
                         ) : (
                             <ul className="edits">
                                 {open.map((line) => (
@@ -112,7 +111,7 @@ export function ReviewPanel({ review, busy, error, dirty, saved, provider, onPro
 
             <details className="provider">
                 <summary>Reviewer provider</summary>
-                <p className="hint">Sent with each review request. The key stays in this browser tab.</p>
+                <p className="hint">The key stays in this browser tab.</p>
                 <input className="field" aria-label="Base URL" placeholder="Base URL, e.g. https://api.openai.com/v1" value={provider.baseUrl} onChange={(event) => onProvider({ ...provider, baseUrl: event.target.value })} />
                 <input className="field" aria-label="Model" placeholder="Model" value={provider.model} onChange={(event) => onProvider({ ...provider, model: event.target.value })} />
                 <input className="field" type="password" aria-label="API key" placeholder="API key" value={provider.key} onChange={(event) => onProvider({ ...provider, key: event.target.value })} />

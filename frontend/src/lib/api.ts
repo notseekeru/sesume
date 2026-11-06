@@ -24,9 +24,33 @@ export interface Account {
 }
 
 export const me = () => request<Account>("/auth/me");
-export const login = (email: string, password: string) => request<Account>("/auth/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email, password }) });
-export const register = (email: string, password: string) => request<Account>("/auth/register", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email, password }) });
 export const logout = () => request<void>("/auth/logout", { method: "POST" });
+
+// AI HERE: resumes move to the account, the reviews written for them do not: the server only stores a
+// review it generated itself. Ceiling: a guest's review is dropped at the first sign-in. Upgrade path: an
+// endpoint that accepts a client-held review once it can be tied to the text it graded.
+async function adoptLocal(): Promise<void> {
+    for (const row of localRead()) {
+        try {
+            await request<Resume>("/resumes", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: row.name, text: row.text }) });
+        } catch {
+            continue;
+        }
+        localWrite(localRead().filter((item) => item.id !== row.id));
+    }
+}
+
+export async function login(email: string, password: string): Promise<Account> {
+    const account = await request<Account>("/auth/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email, password }) });
+    await adoptLocal();
+    return account;
+}
+
+export async function register(email: string, password: string): Promise<Account> {
+    const account = await request<Account>("/auth/register", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email, password }) });
+    await adoptLocal();
+    return account;
+}
 
 export interface Provider {
     baseUrl: string;
@@ -66,8 +90,6 @@ function llmHeaders(): Record<string, string> {
 export interface ResumeSummary {
     id: string;
     name: string;
-    page_count: number;
-    chars: number;
     created_at: string;
     updated_at: string;
 }
@@ -116,7 +138,7 @@ export interface ResumeReview {
     created_at: string;
 }
 
-let account = false;
+let account: boolean | null = null;
 let settle: (value: boolean) => void = () => undefined;
 const sessionReady = new Promise<boolean>((resolve) => {
     settle = resolve;
@@ -126,6 +148,8 @@ export function setAccount(email: string | null): void {
     account = email !== null;
     settle(account);
 }
+
+const signedIn = () => (account === null ? sessionReady : Promise.resolve(account));
 
 interface LocalResume {
     id: string;
@@ -160,7 +184,7 @@ function localFind(id: string): LocalResume {
 }
 
 function localSummary(row: LocalResume): ResumeSummary {
-    return { id: row.id, name: row.name, page_count: 0, chars: row.text.length, created_at: row.created_at, updated_at: row.updated_at };
+    return { id: row.id, name: row.name, created_at: row.created_at, updated_at: row.updated_at };
 }
 
 function localResume(row: LocalResume): Resume {
@@ -178,12 +202,12 @@ function uid(): string {
 }
 
 export async function listResumes(): Promise<ResumeSummary[]> {
-    if (await sessionReady) return request<ResumeSummary[]>("/resumes");
+    if (await signedIn()) return request<ResumeSummary[]>("/resumes");
     return localRead().map(localSummary);
 }
 
 export async function getResume(id: string): Promise<Resume> {
-    if (await sessionReady) return request<Resume>(`/resumes/${id}`);
+    if (await signedIn()) return request<Resume>(`/resumes/${id}`);
     return localResume(localFind(id));
 }
 
@@ -194,29 +218,29 @@ export async function extractResume(file: File): Promise<ResumeExtract> {
 }
 
 export async function createResume(input: { name: string; text: string }): Promise<Resume> {
-    if (await sessionReady) return request<Resume>("/resumes", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(input) });
+    if (await signedIn()) return request<Resume>("/resumes", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(input) });
     const now = new Date().toISOString();
     return localSave({ id: uid(), name: input.name, text: input.text, reviewed: null, review: null, created_at: now, updated_at: now });
 }
 
 export async function updateResume(id: string, input: { name: string; text: string }): Promise<Resume> {
-    if (await sessionReady) return request<Resume>(`/resumes/${id}`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(input) });
+    if (await signedIn()) return request<Resume>(`/resumes/${id}`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(input) });
     return localSave({ ...localFind(id), name: input.name, text: input.text, updated_at: new Date().toISOString() });
 }
 
 export async function deleteResume(id: string): Promise<void> {
-    if (await sessionReady) return request<void>(`/resumes/${id}`, { method: "DELETE" });
+    if (await signedIn()) return request<void>(`/resumes/${id}`, { method: "DELETE" });
     localWrite(localRead().filter((item) => item.id !== id));
 }
 
 export async function getResumeReview(id: string): Promise<ResumeReview | null> {
-    if (await sessionReady) return request<ResumeReview | null>(`/resumes/${id}/review`);
+    if (await signedIn()) return request<ResumeReview | null>(`/resumes/${id}/review`);
     const row = localFind(id);
     return row.review === null ? null : { ...row.review, stale: row.reviewed !== row.text };
 }
 
 export async function reviewResume(id: string): Promise<ResumeReview> {
-    if (await sessionReady) return request<ResumeReview>(`/resumes/${id}/review`, { method: "POST", headers: llmHeaders() });
+    if (await signedIn()) return request<ResumeReview>(`/resumes/${id}/review`, { method: "POST", headers: llmHeaders() });
     const row = localFind(id);
     const review = await request<ResumeReview>("/review", { method: "POST", headers: { "content-type": "application/json", ...llmHeaders() }, body: JSON.stringify({ text: row.text }) });
     localSave({ ...row, review, reviewed: row.text });
@@ -224,7 +248,7 @@ export async function reviewResume(id: string): Promise<ResumeReview> {
 }
 
 export async function retryRewrite(id: string, source: string): Promise<ResumeReview> {
-    if (await sessionReady) return request<ResumeReview>(`/resumes/${id}/review/rewrite`, { method: "POST", headers: { "content-type": "application/json", ...llmHeaders() }, body: JSON.stringify({ source }) });
+    if (await signedIn()) return request<ResumeReview>(`/resumes/${id}/review/rewrite`, { method: "POST", headers: { "content-type": "application/json", ...llmHeaders() }, body: JSON.stringify({ source }) });
     const row = localFind(id);
     if (row.review === null) throw new ApiError(409, "Review this resume first: there is no edit to retry.");
     const got = await request<ReviewRewrite>("/review/rewrite", { method: "POST", headers: { "content-type": "application/json", ...llmHeaders() }, body: JSON.stringify({ text: row.text, source }) });

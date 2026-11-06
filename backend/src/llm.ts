@@ -75,7 +75,7 @@ const REVIEW_EXAMPLE = {
     lines: [{ text: "a claim-bearing line, quoted exactly as written", call: "weak" }],
 };
 
-const REVIEW_PROMPT = `You are maxterview's resume reviewer. You read ONE resume twice: as the screen that decides whether it earns an interview, and as the interviewer who then has to turn it into evidence they can defend.
+const REVIEW_PROMPT = `You are sesume's resume reviewer. You read ONE resume twice: as the screen that decides whether it earns an interview, and as the interviewer who then has to turn it into evidence they can defend.
 
 Your user message is the resume, and it is your only evidence. ${GROUNDING_PROMPT}
 You grade the page, not the person: name what the words do not show, and never tell the candidate what their career is worth. ${UNTRUSTED_INPUT}

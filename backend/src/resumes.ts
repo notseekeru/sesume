@@ -7,6 +7,8 @@ export const LIMITS = {
 };
 const PARSE_CONCURRENCY = Number(process.env.RESUME_PARSE_CONCURRENCY ?? 2);
 
+export const TOO_LARGE = `That file is larger than ${LIMITS.bytes / (1024 * 1024)} MB. Trim it down, or paste the text instead.`;
+
 const PDF_MAGIC = "%PDF-";
 
 export class ExtractError extends Error {}
@@ -103,7 +105,7 @@ async function parse(data: Uint8Array): Promise<Extracted> {
 }
 
 export async function extractPdf(data: Uint8Array): Promise<Extracted> {
-    if (data.byteLength > LIMITS.bytes) throw new ExtractError(`That file is larger than ${LIMITS.bytes / (1024 * 1024)} MB. Trim it down, or paste the text instead.`);
+    if (data.byteLength > LIMITS.bytes) throw new ExtractError(TOO_LARGE);
     if (!hasPdfHeader(data)) throw new ExtractError("That file isn't a PDF. Upload a PDF, or paste the text instead.");
     return slot(() => parse(data));
 }
