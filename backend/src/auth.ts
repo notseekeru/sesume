@@ -36,8 +36,9 @@ export function mintToken(id: string, expires = Date.now() + TTL): string {
 }
 
 export function issue(c: Context, id: string): void {
-    // AI HERE: the cookie is sent over plain HTTP because nothing in this repo terminates TLS; set `secure` once a proxy does.
-    setCookie(c, COOKIE, mintToken(id), { httpOnly: true, sameSite: "Lax", path: "/", maxAge: TTL / 1000 });
+    // AI HERE: TLS is not terminated in this repo, so `secure` is on unless COOKIE_SECURE=false; drop the flag once a proxy always terminates TLS.
+    const secure = process.env.COOKIE_SECURE !== "false";
+    setCookie(c, COOKIE, mintToken(id), { httpOnly: true, secure, sameSite: "Lax", path: "/", maxAge: TTL / 1000 });
 }
 
 export function clear(c: Context): void {
