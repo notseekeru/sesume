@@ -35,12 +35,9 @@ export function ReviewPanel({ review, busy, error, dirty, saved, provider, onPro
             </div>
 
             {error && (
-                <div className="flash" role="alert">
-                    <span className="glyph" aria-hidden>
-                        !
-                    </span>
-                    <p>{error}</p>
-                </div>
+                <p className="hint" role="alert">
+                    {error}
+                </p>
             )}
 
             {review === null ? (

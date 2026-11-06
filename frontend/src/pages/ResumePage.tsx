@@ -1,10 +1,11 @@
 import { type CSSProperties, Fragment, type PointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { CodeEditor } from "../components/CodeEditor";
 import { Logo } from "../components/Logo";
 import { PdfView } from "../components/PdfView";
 import { ReviewPanel } from "../components/ReviewPanel";
 import { ThemeToggle } from "../components/ThemeToggle";
-import { ApiError, compileLatex, createResume, deleteResume, extractResume, getResume, getResumeReview, listResumes, loadProvider, type Provider, type ResumeReview, type ResumeSummary, retryRewrite, reviewResume, saveProvider, updateResume } from "../lib/api";
+import { ApiError, compileLatex, createResume, deleteResume, extractResume, getResume, getResumeReview, listResumes, loadProvider, logout, type Provider, type ResumeReview, type ResumeSummary, retryRewrite, reviewResume, saveProvider, updateResume } from "../lib/api";
 import { isLatex } from "../lib/latex";
 import { replaceLine, type Suggestion } from "../lib/resumeText";
 import { toLatex } from "../lib/toLatex";
@@ -106,7 +107,7 @@ function normalize(widths: Record<Panel, number>, shown: Record<Panel, boolean>)
     return next;
 }
 
-export default function ResumePage() {
+export default function ResumePage({ email }: { email: string | null }) {
     const [rows, setRows] = useState<ResumeSummary[]>([]);
     const [draft, setDraft] = useState<Draft>(EMPTY);
     const [saved, setSaved] = useState<{ name: string; text: string } | null>(null);
@@ -173,8 +174,8 @@ export default function ResumePage() {
             } else {
                 setSaved(null);
             }
-        } catch {
-            setError("Could not load your resumes.");
+        } catch (problem) {
+            if (!(problem instanceof ApiError && problem.status === 401)) setError("Could not load your resumes.");
         }
     }, []);
 
@@ -311,9 +312,9 @@ export default function ResumePage() {
     }
 
     async function save() {
-        const name = draft.name.trim();
-        if (!name || !draft.text.trim()) {
-            setError("A resume needs a name and some text.");
+        const name = draft.name.trim() || "Untitled resume";
+        if (!draft.text.trim()) {
+            setError("A resume needs some text.");
             return;
         }
         setBusy(true);
@@ -440,6 +441,11 @@ export default function ResumePage() {
         saveProvider(next);
     }
 
+    const signOut = async () => {
+        await logout().catch(() => undefined);
+        window.location.assign("/");
+    };
+
     return (
         <div className="studio">
             <header className="masthead">
@@ -474,6 +480,15 @@ export default function ResumePage() {
                 )}
                 <div className="actions">
                     <ThemeToggle />
+                    {email ? (
+                        <button type="button" className="btn quiet" title={email} onClick={() => void signOut()}>
+                            Sign out
+                        </button>
+                    ) : (
+                        <Link className="btn" to="/login">
+                            Sign in
+                        </Link>
+                    )}
                     {draft.id ? (
                         <button type="button" className="btn" disabled={busy} onClick={() => void remove()}>
                             Delete
@@ -494,16 +509,9 @@ export default function ResumePage() {
             </header>
 
             {(error || notice) && (
-                <div className="flash" role={error ? "alert" : "status"}>
-                    {error ? (
-                        <span className="glyph" aria-hidden>
-                            !
-                        </span>
-                    ) : (
-                        <span className="dot" aria-hidden />
-                    )}
-                    <p>{error ?? notice}</p>
-                </div>
+                <p className="hint" role={error ? "alert" : "status"}>
+                    {error ?? notice}
+                </p>
             )}
 
             {editing ? (
@@ -515,7 +523,7 @@ export default function ResumePage() {
                                 {panel === "editor" && (
                                     <>
                                         <div className="pane-bar">
-                                            <input className="name" value={draft.name} maxLength={80} placeholder="Resume name" aria-label="Resume name" onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} />
+                                            <input className="name" value={draft.name} maxLength={80} placeholder="Untitled resume" aria-label="Resume name" onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} />
                                             <div className="actions">
                                                 {!latex && draft.text.trim() !== "" && (
                                                     <button type="button" className="btn quiet" onClick={convertToLatex}>
@@ -611,7 +619,7 @@ export default function ResumePage() {
                         <button type="button" className="btn link paste" disabled={busy} onClick={() => setPasting(true)}>
                             Paste resume instead
                         </button>
-                        <p className="hint">Single account, no login: every resume here is stored unencrypted in this deployment's database.</p>
+                        <p className="hint">Every resume here is stored unencrypted in this deployment's database and is visible only to your account.</p>
                     </div>
                 </main>
             )}
