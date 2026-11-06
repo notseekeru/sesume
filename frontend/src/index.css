@@ -188,7 +188,6 @@ h3 {
     color: var(--ink);
     font-size: var(--t3);
     white-space: nowrap;
-    text-decoration: none;
     transition:
         border-color var(--fast) var(--ease),
         background var(--fast) var(--ease),
@@ -286,21 +285,12 @@ h3 {
 }
 
 .auth {
-    display: grid;
-    place-items: center;
     min-height: 100dvh;
-    padding: var(--s4);
 }
 
-.auth-card {
-    display: flex;
-    flex-direction: column;
-    gap: var(--s2);
+.welcome-card.auth-card {
     width: min(360px, 100%);
-    padding: var(--s6);
-    background: var(--card);
-    border: 1px solid var(--line);
-    border-radius: var(--r);
+    gap: var(--s2);
 }
 
 .auth-card .btn.primary,
@@ -1080,7 +1070,7 @@ body.resizing {
     overflow-y: auto;
 }
 
-main:not(.welcome, .auth) {
+main:not(.welcome) {
     max-width: 48rem;
     margin: 0 auto;
     padding: var(--s8) var(--s6);

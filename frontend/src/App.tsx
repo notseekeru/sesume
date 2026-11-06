@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, Route, Routes } from "react-router-dom";
+import { Route, Routes } from "react-router-dom";
 import { ApiError, me } from "./lib/api";
 import LoginPage from "./pages/LoginPage";
 import NotFound from "./pages/NotFound";
@@ -18,14 +18,7 @@ function Studio() {
     }, []);
 
     if (gate.state === "checking") return null;
-    if (gate.state === "out")
-        return (
-            <main className="auth">
-                <Link className="btn primary" to="/login">
-                    Sign in
-                </Link>
-            </main>
-        );
+    if (gate.state === "out") return <LoginPage />;
     return <ResumePage email={gate.email} />;
 }
 

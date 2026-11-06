@@ -1,5 +1,4 @@
 import { type FormEvent, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { ApiError, login, register } from "../lib/api";
 
 export default function LoginPage() {
@@ -8,7 +7,6 @@ export default function LoginPage() {
     const [password, setPassword] = useState("");
     const [error, setError] = useState<string | null>(null);
     const [busy, setBusy] = useState(false);
-    const navigate = useNavigate();
 
     async function submit(event: FormEvent) {
         event.preventDefault();
@@ -16,7 +14,7 @@ export default function LoginPage() {
         setError(null);
         try {
             await (creating ? register(email, password) : login(email, password));
-            navigate("/", { replace: true });
+            window.location.assign("/");
         } catch (problem) {
             setError(problem instanceof ApiError ? problem.message : "Could not reach the server.");
             setBusy(false);
@@ -24,8 +22,8 @@ export default function LoginPage() {
     }
 
     return (
-        <main className="auth">
-            <form className="auth-card" onSubmit={(event) => void submit(event)}>
+        <main className="welcome auth">
+            <form className="welcome-card auth-card" onSubmit={(event) => void submit(event)}>
                 <label className="hint" htmlFor="email">
                     Email
                 </label>
