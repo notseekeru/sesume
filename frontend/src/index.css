@@ -188,6 +188,7 @@ h3 {
     color: var(--ink);
     font-size: var(--t3);
     white-space: nowrap;
+    text-decoration: none;
     transition:
         border-color var(--fast) var(--ease),
         background var(--fast) var(--ease),
@@ -485,28 +486,6 @@ h3 {
 .theme-dot.auto {
     background: var(--card);
     border-left: 4px solid var(--ink);
-}
-
-.flash {
-    display: flex;
-    align-items: flex-start;
-    gap: var(--s2);
-    padding: var(--s2) var(--s3);
-    border: 1px solid var(--line);
-    border-left: 2px solid var(--ink);
-    border-radius: var(--r);
-    background: var(--card);
-    color: var(--ink-soft);
-    font-size: var(--t3);
-}
-
-.flash .glyph {
-    color: var(--ink);
-}
-
-.flash .dot {
-    margin-top: 6px;
-    color: var(--ink);
 }
 
 .state {

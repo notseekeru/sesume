@@ -58,7 +58,7 @@ function read(c: Context): { id: string } | null {
 
 export const guard: MiddlewareHandler<Session> = async (c, next) => {
     const user = read(c);
-    if (user === null) return c.json({ detail: "Sign in to continue." }, 401);
+    if (user === null) return c.json({ detail: "An account is required." }, 401);
     c.set("user", user);
     await next();
 };

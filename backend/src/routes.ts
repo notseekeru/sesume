@@ -128,7 +128,7 @@ routes.post("/auth/logout", (c) => {
 
 routes.get("/auth/me", guard, async (c) => {
     const found = await one("SELECT email FROM users WHERE id = $1", [c.get("user").id]);
-    if (found === null) throw new Problem(401, "Sign in to continue.");
+    if (found === null) throw new Problem(401, "An account is required.");
     return c.json({ email: found.email });
 });
 
@@ -141,7 +141,7 @@ routes.get("/resumes/:id", guard, async (c) => {
     return c.json(found);
 });
 
-routes.post("/resumes/extract", guard, async (c) => {
+routes.post("/resumes/extract", async (c) => {
     const declared = Number(c.req.header("content-length") ?? 0);
     const limit = (LIMITS.bytes / (1024 * 1024)).toString();
     if (declared > LIMITS.bytes + 64 * 1024) throw new Problem(413, `That file is larger than ${limit} MB. Trim it down, or paste the text instead.`);
@@ -234,7 +234,33 @@ routes.post("/resumes/:id/review/rewrite", guard, jsonLimit, async (c) => {
     return reviewJson(saved?.review, saved?.created_at, true);
 });
 
-routes.post("/resumes/preview", guard, jsonLimit, async (c) => {
+routes.post("/review", jsonLimit, async (c) => {
+    const input = await body<{ text?: unknown }>(c);
+    const text = typeof input.text === "string" ? sanitize(input.text, LIMITS.chars) : "";
+    if (!text) throw new Problem(422, "There is no resume text to review.");
+    const config = configFrom(c.req.raw.headers);
+    if (isStub(config)) throw new Problem(503, "No scoring engine is configured on this deployment, so a review cannot run.");
+    const got = await reviewResume(text, config);
+    if (got === null) throw new Problem(503, "The reviewer could not read this resume right now. Try again in a moment.");
+    const parsed = validReview(got);
+    if (parsed === null) throw new Problem(500, "Something went wrong.");
+    return c.json({ ...parsed, created_at: new Date().toISOString(), stale: false, reads_at: readsAt(parsed.levels.map((level) => [level.level, level.call])) }, 201);
+});
+
+routes.post("/review/rewrite", jsonLimit, async (c) => {
+    const input = await body<{ text?: unknown; source?: unknown }>(c);
+    const text = typeof input.text === "string" ? sanitize(input.text, LIMITS.chars) : "";
+    const source = claim(input.source, LINE_MAX);
+    if (!text) throw new Problem(422, "There is no resume text to edit.");
+    if (!source || !quotedBy(text, source)) throw new Problem(422, "That line is not on this resume any more. Re-review it and try again.");
+    const config = configFrom(c.req.raw.headers);
+    if (isStub(config)) throw new Problem(503, "No scoring engine is configured on this deployment, so an edit cannot be retried.");
+    const got = await rewriteLine(text, source, config);
+    if (got === null) throw new Problem(503, "The reviewer could not write a different line right now. Try again in a moment.");
+    return c.json({ source, rewrite: got });
+});
+
+routes.post("/resumes/preview", jsonLimit, async (c) => {
     const input = await body<{ text?: unknown }>(c);
     const text = typeof input.text === "string" ? input.text : "";
     if (!text.includes("\\documentclass")) throw new Problem(422, "That is not a LaTeX document: it needs a \\documentclass line.");

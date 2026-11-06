@@ -45,7 +45,17 @@ test("health reports down when the database is unreachable", async () => {
 test("resumes answer 401 without a session", async () => {
     const response = await app.request("/api/resumes");
     assert.equal(response.status, 401);
-    assert.deepEqual(await response.json(), { detail: "Sign in to continue." });
+    assert.deepEqual(await response.json(), { detail: "An account is required." });
+});
+
+test("the stateless pipeline answers without a session", async () => {
+    const extract = await app.request("/api/resumes/extract", { method: "POST", body: new FormData() });
+    const preview = await app.request("/api/resumes/preview", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text: "plain text" }) });
+    const review = await app.request("/api/review", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text: "plain text" }) });
+    assert.equal(extract.status, 422);
+    assert.deepEqual(await extract.json(), { detail: "Attach a PDF in the file field." });
+    assert.equal(preview.status, 422);
+    assert.equal(review.status, 503);
 });
 
 test("a session cookie is honoured only when it is intact and unexpired", async () => {

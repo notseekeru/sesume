@@ -1,4 +1,5 @@
 import { type CSSProperties, Fragment, type PointerEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { CodeEditor } from "../components/CodeEditor";
 import { Logo } from "../components/Logo";
 import { PdfView } from "../components/PdfView";
@@ -106,7 +107,7 @@ function normalize(widths: Record<Panel, number>, shown: Record<Panel, boolean>)
     return next;
 }
 
-export default function ResumePage({ email }: { email: string }) {
+export default function ResumePage({ email }: { email: string | null }) {
     const [rows, setRows] = useState<ResumeSummary[]>([]);
     const [draft, setDraft] = useState<Draft>(EMPTY);
     const [saved, setSaved] = useState<{ name: string; text: string } | null>(null);
@@ -115,8 +116,6 @@ export default function ResumePage({ email }: { email: string }) {
     const [future, setFuture] = useState<UndoStep[]>([]);
     const [finished, setFinished] = useState<Set<string>>(new Set());
     const [busy, setBusy] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-    const [notice, setNotice] = useState<string | null>(null);
     const [reviewing, setReviewing] = useState(false);
     const [reviewError, setReviewError] = useState<string | null>(null);
     const [importing, setImporting] = useState(false);
@@ -163,18 +162,14 @@ export default function ResumePage({ email }: { email: string }) {
     }, []);
 
     const load = useCallback(async () => {
-        try {
-            const list = await listResumes();
-            setRows(list);
-            if (list.length) {
-                const full = await getResume(list[0].id);
-                setDraft({ id: full.id, name: full.name, text: full.text });
-                setSaved({ name: full.name, text: full.text });
-            } else {
-                setSaved(null);
-            }
-        } catch {
-            setError("Could not load your resumes.");
+        const list = await listResumes();
+        setRows(list);
+        if (list.length) {
+            const full = await getResume(list[0].id);
+            setDraft({ id: full.id, name: full.name, text: full.text });
+            setSaved({ name: full.name, text: full.text });
+        } else {
+            setSaved(null);
         }
     }, []);
 
@@ -288,13 +283,8 @@ export default function ResumePage({ email }: { email: string }) {
 
     async function pick(file: File | undefined) {
         if (!file || busy) return;
-        if (!/\.pdf$/i.test(file.name) && file.type !== "application/pdf") {
-            setError("That isn't a PDF. Drop a PDF, or paste it instead.");
-            return;
-        }
+        if (!/\.pdf$/i.test(file.name) && file.type !== "application/pdf") return;
         setBusy(true);
-        setError(null);
-        setNotice(null);
         try {
             const got = await extractResume(file);
             setDraft({ id: null, name: file.name.replace(/\.pdf$/i, "").slice(0, 80), text: got.text });
@@ -302,22 +292,15 @@ export default function ResumePage({ email }: { email: string }) {
             setPasting(true);
             setImporting(false);
             resetHistory();
-            setNotice(got.truncated ? `Read the first ${got.pages} pages. Check the text and fix anything missing. Not saved yet.` : "Read the PDF. Check the text, then Save. Not saved yet.");
-        } catch (problem) {
-            setError(problem instanceof ApiError ? problem.message : "Could not import that PDF.");
         } finally {
             setBusy(false);
         }
     }
 
     async function save() {
-        const name = draft.name.trim();
-        if (!name || !draft.text.trim()) {
-            setError("A resume needs a name and some text.");
-            return;
-        }
+        const name = draft.name.trim() || "Untitled resume";
+        if (!draft.text.trim()) return;
         setBusy(true);
-        setError(null);
         try {
             const saved = draft.id ? await updateResume(draft.id, { name, text: draft.text }) : await createResume({ name, text: draft.text });
             setRows((list) => (draft.id ? list.map((row) => (row.id === saved.id ? saved : row)) : [saved, ...list]));
@@ -325,10 +308,7 @@ export default function ResumePage({ email }: { email: string }) {
             setSaved({ name: saved.name, text: saved.text });
             setPasting(false);
             setImporting(false);
-            setNotice(null);
             if (draft.id) await loadReview(saved.id);
-        } catch (problem) {
-            setError(problem instanceof ApiError ? problem.message : "Could not save this resume.");
         } finally {
             setBusy(false);
         }
@@ -336,18 +316,12 @@ export default function ResumePage({ email }: { email: string }) {
 
     async function open(id: string) {
         if (draft.id === id) return;
-        setError(null);
-        setNotice(null);
         setImporting(false);
         setPasting(false);
-        try {
-            const full = await getResume(id);
-            setDraft({ id: full.id, name: full.name, text: full.text });
-            setSaved({ name: full.name, text: full.text });
-            resetHistory();
-        } catch (problem) {
-            setError(problem instanceof ApiError ? problem.message : "Could not open that resume.");
-        }
+        const full = await getResume(id);
+        setDraft({ id: full.id, name: full.name, text: full.text });
+        setSaved({ name: full.name, text: full.text });
+        resetHistory();
     }
 
     function startNew() {
@@ -356,8 +330,6 @@ export default function ResumePage({ email }: { email: string }) {
         resetHistory();
         setPasting(false);
         setImporting(true);
-        setError(null);
-        setNotice(null);
     }
 
     function discard() {
@@ -367,14 +339,12 @@ export default function ResumePage({ email }: { email: string }) {
         resetHistory();
         setPasting(false);
         setImporting(false);
-        setNotice(null);
         void load();
     }
 
     async function remove() {
         if (!draft.id || !confirm(`Delete "${draft.name}"?`)) return;
         setBusy(true);
-        setError(null);
         try {
             await deleteResume(draft.id);
             const rest = rows.filter((row) => row.id !== draft.id);
@@ -384,10 +354,7 @@ export default function ResumePage({ email }: { email: string }) {
             resetHistory();
             setPasting(false);
             setImporting(false);
-            setNotice(null);
             if (rest.length) await open(rest[0].id);
-        } catch (problem) {
-            setError(problem instanceof ApiError ? problem.message : "Could not delete that resume.");
         } finally {
             setBusy(false);
         }
@@ -432,7 +399,6 @@ export default function ResumePage({ email }: { email: string }) {
         burst.current = 0;
         setHover(null);
         setDraft((current) => ({ ...current, text: toLatex(current.text) }));
-        setNotice("Converted to LaTeX. Check the structure, then Save.");
     }
 
     function updateProvider(next: Provider) {
@@ -479,9 +445,15 @@ export default function ResumePage({ email }: { email: string }) {
                 )}
                 <div className="actions">
                     <ThemeToggle />
-                    <button type="button" className="btn quiet" title={email} onClick={() => void signOut()}>
-                        Sign out
-                    </button>
+                    {email ? (
+                        <button type="button" className="btn quiet" title={email} onClick={() => void signOut()}>
+                            Sign out
+                        </button>
+                    ) : (
+                        <Link className="btn" to="/login">
+                            Sign in
+                        </Link>
+                    )}
                     {draft.id ? (
                         <button type="button" className="btn" disabled={busy} onClick={() => void remove()}>
                             Delete
@@ -501,19 +473,6 @@ export default function ResumePage({ email }: { email: string }) {
                 </div>
             </header>
 
-            {(error || notice) && (
-                <div className="flash" role={error ? "alert" : "status"}>
-                    {error ? (
-                        <span className="glyph" aria-hidden>
-                            !
-                        </span>
-                    ) : (
-                        <span className="dot" aria-hidden />
-                    )}
-                    <p>{error ?? notice}</p>
-                </div>
-            )}
-
             {editing ? (
                 <div className="columns" ref={columns}>
                     {visible.map((panel, index) => (
@@ -523,7 +482,7 @@ export default function ResumePage({ email }: { email: string }) {
                                 {panel === "editor" && (
                                     <>
                                         <div className="pane-bar">
-                                            <input className="name" value={draft.name} maxLength={80} placeholder="Resume name" aria-label="Resume name" onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} />
+                                            <input className="name" value={draft.name} maxLength={80} placeholder="Untitled resume" aria-label="Resume name" onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} />
                                             <div className="actions">
                                                 {!latex && draft.text.trim() !== "" && (
                                                     <button type="button" className="btn quiet" onClick={convertToLatex}>
