@@ -603,7 +603,7 @@ body.resizing {
 .pane-empty {
     display: flex;
     flex-direction: column;
-    justify-content: center;
+    justify-content: safe center;
     gap: var(--s3);
     padding: var(--s4);
 }
