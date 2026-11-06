@@ -4,7 +4,7 @@ import { Logo } from "../components/Logo";
 import { PdfView } from "../components/PdfView";
 import { ReviewPanel } from "../components/ReviewPanel";
 import { ThemeToggle } from "../components/ThemeToggle";
-import { ApiError, compileLatex, createResume, deleteResume, extractResume, getResume, getResumeReview, listResumes, loadProvider, type Provider, type ResumeReview, type ResumeSummary, retryRewrite, reviewResume, saveProvider, updateResume } from "../lib/api";
+import { ApiError, compileLatex, createResume, deleteResume, extractResume, getResume, getResumeReview, listResumes, loadProvider, logout, type Provider, type ResumeReview, type ResumeSummary, retryRewrite, reviewResume, saveProvider, updateResume } from "../lib/api";
 import { isLatex } from "../lib/latex";
 import { replaceLine, type Suggestion } from "../lib/resumeText";
 import { toLatex } from "../lib/toLatex";
@@ -106,7 +106,7 @@ function normalize(widths: Record<Panel, number>, shown: Record<Panel, boolean>)
     return next;
 }
 
-export default function ResumePage() {
+export default function ResumePage({ email }: { email: string }) {
     const [rows, setRows] = useState<ResumeSummary[]>([]);
     const [draft, setDraft] = useState<Draft>(EMPTY);
     const [saved, setSaved] = useState<{ name: string; text: string } | null>(null);
@@ -440,6 +440,11 @@ export default function ResumePage() {
         saveProvider(next);
     }
 
+    const signOut = async () => {
+        await logout().catch(() => undefined);
+        window.location.assign("/");
+    };
+
     return (
         <div className="studio">
             <header className="masthead">
@@ -474,6 +479,9 @@ export default function ResumePage() {
                 )}
                 <div className="actions">
                     <ThemeToggle />
+                    <button type="button" className="btn quiet" title={email} onClick={() => void signOut()}>
+                        Sign out
+                    </button>
                     {draft.id ? (
                         <button type="button" className="btn" disabled={busy} onClick={() => void remove()}>
                             Delete
@@ -611,7 +619,7 @@ export default function ResumePage() {
                         <button type="button" className="btn link paste" disabled={busy} onClick={() => setPasting(true)}>
                             Paste resume instead
                         </button>
-                        <p className="hint">Single account, no login: every resume here is stored unencrypted in this deployment's database.</p>
+                        <p className="hint">Every resume here is stored unencrypted in this deployment's database and is visible only to your account.</p>
                     </div>
                 </main>
             )}

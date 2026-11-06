@@ -188,6 +188,7 @@ h3 {
     color: var(--ink);
     font-size: var(--t3);
     white-space: nowrap;
+    text-decoration: none;
     transition:
         border-color var(--fast) var(--ease),
         background var(--fast) var(--ease),
@@ -282,6 +283,33 @@ h3 {
 
 .field:focus-visible {
     border-color: var(--ink);
+}
+
+.auth {
+    display: grid;
+    place-items: center;
+    min-height: 100dvh;
+    padding: var(--s4);
+}
+
+.auth-card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--s2);
+    width: min(360px, 100%);
+    padding: var(--s6);
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--r);
+}
+
+.auth-card .btn.primary,
+.auth-card .btn.link {
+    justify-content: center;
+}
+
+.auth-card .btn.primary {
+    margin-top: var(--s2);
 }
 
 .studio {
@@ -1052,7 +1080,7 @@ body.resizing {
     overflow-y: auto;
 }
 
-main:not(.welcome) {
+main:not(.welcome, .auth) {
     max-width: 48rem;
     margin: 0 auto;
     padding: var(--s8) var(--s6);

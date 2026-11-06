@@ -11,6 +11,7 @@ export class ApiError extends Error {
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     const response = await fetch(`${BASE}${path}`, init);
+    if (response.status === 401 && !path.startsWith("/auth/")) window.location.assign("/");
     if (!response.ok) {
         const body = (await response.json().catch(() => null)) as { detail?: unknown } | null;
         throw new ApiError(response.status, typeof body?.detail === "string" ? body.detail : `Request failed (${response.status}).`);
@@ -18,6 +19,15 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     if (response.status === 204) return undefined as T;
     return (await response.json()) as T;
 }
+
+export interface Account {
+    email: string;
+}
+
+export const me = () => request<Account>("/auth/me");
+export const login = (email: string, password: string) => request<Account>("/auth/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email, password }) });
+export const register = (email: string, password: string) => request<Account>("/auth/register", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email, password }) });
+export const logout = () => request<void>("/auth/logout", { method: "POST" });
 
 export interface Provider {
     baseUrl: string;
