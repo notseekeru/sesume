@@ -200,9 +200,40 @@ jobs:
       - name: Push the lambda image
         run: docker push "$IMAGE:$SHA"
 
+      - name: Roll the migrator
+        run: |
+          if aws lambda get-function --function-name sesume-migrate >/dev/null 2>&1; then
+            aws lambda update-function-code \
+              --function-name sesume-migrate \
+              --image-uri "$IMAGE:$SHA" \
+              --query 'FunctionName' --output text
+            aws lambda wait function-updated --function-name sesume-migrate
+          else
+            echo "sesume-migrate does not exist yet, skipped"
+          fi
+
+      - name: Migrate the database
+        run: |
+          if ! aws lambda get-function --function-name sesume-migrate >/dev/null 2>&1; then
+            echo "sesume-migrate does not exist yet, skipped"
+            exit 0
+          fi
+          result=$(aws lambda invoke \
+            --function-name sesume-migrate \
+            --region "$AWS_REGION" \
+            --cli-read-timeout 330 \
+            --payload '{}' \
+            /tmp/migrate.json)
+          echo "$result"
+          if echo "$result" | jq -e '.FunctionError' >/dev/null; then
+            echo "the migration failed:"
+            jq -r '.errorMessage // .' /tmp/migrate.json
+            exit 1
+          fi
+
       - name: Roll the functions
         run: |
-          for function in api worker migrate; do
+          for function in api worker; do
             if aws lambda get-function --function-name "sesume-$function" >/dev/null 2>&1; then
               aws lambda update-function-code \
                 --function-name "sesume-$function" \
