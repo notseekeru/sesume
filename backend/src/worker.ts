@@ -1,5 +1,4 @@
-import { pool } from "./db.js";
-import { runReview } from "./reviewJob.js";
+import { ready } from "./bootstrap.js";
 
 export interface SqsEvent {
     Records: { messageId: string; body: string }[];
@@ -21,6 +20,10 @@ export function jobOf(body: string): { resumeId: string; userId: string } | null
 }
 
 export async function handler(event: SqsEvent): Promise<SqsResult> {
+    await ready();
+    const { pool } = await import("./db.js");
+    const { runReview } = await import("./reviewJob.js");
+
     const batchItemFailures: { itemIdentifier: string }[] = [];
     for (const record of event.Records) {
         const job = jobOf(record.body);
