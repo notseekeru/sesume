@@ -34,7 +34,7 @@ RUN printf '%s\n' \
 
 COPY --from=build /app/node_modules ${LAMBDA_TASK_ROOT}/node_modules
 COPY --from=build /app/dist ${LAMBDA_TASK_ROOT}/dist
-COPY --from=build /app/migrations ${LAMBDA_TASK_ROOT}/migrations
+COPY migrations ${LAMBDA_TASK_ROOT}/migrations
 COPY --from=build /app/package.json ${LAMBDA_TASK_ROOT}/package.json
 
 CMD ["dist/lambda.handler"]
