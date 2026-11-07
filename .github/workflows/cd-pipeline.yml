@@ -94,6 +94,7 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.service.name }}
           cache-to: type=gha,mode=max,scope=${{ matrix.service.name }}
 
+      # var/lang and var/runtime are the runtime the Lambda base image ships, not this image's own dependencies.
       - name: Scan
         run: |
           docker run --rm \
@@ -101,7 +102,7 @@ jobs:
             -v "$PWD/.trivyignore.yaml:/.trivyignore.yaml" \
             aquasec/trivy:0.76.2 image \
             --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 \
-            --skip-dirs usr/local --skip-dirs root/.cache \
+            --skip-dirs usr/local --skip-dirs root/.cache --skip-dirs var/lang --skip-dirs var/runtime \
             --ignorefile /.trivyignore.yaml \
             "$IMAGE:$SHA"
 
