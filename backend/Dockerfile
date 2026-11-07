@@ -14,21 +14,31 @@ RUN chown node:node /app
 
 USER node
 
+FROM base AS dev
+
 RUN npm ci
 
 COPY --chown=node:node . .
-
-FROM base AS dev
 
 EXPOSE 4100
 
 CMD ["npm", "run", "dev"]
 
+FROM base AS builder
+
+RUN npm ci
+
+COPY --chown=node:node . .
+
+RUN npm run build
+
 FROM base AS prod
 
 ENV NODE_ENV=production
 
-RUN npm run build && npm prune --omit=dev
+RUN npm ci --omit=dev
+
+COPY --from=builder /app/dist ./dist
 
 EXPOSE 4100
 
