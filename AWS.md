@@ -38,8 +38,8 @@ flowchart TD
 | Elastic IP | stable source address for the NAT | free while attached |
 | RDS Postgres `db.t4g.micro` 20GB | resumes, reviews, accounts | inside the free plan or credits, about $15 paid |
 | SSM parameter store | `DATABASE_URL`, `AUTH_SECRET`, `DATA_KEY`, tunnel token, and the RDS password inside the first of those. Also Session Manager for a shell with no port 22, and Patch Manager for the box | standard parameters free |
-| SQS | review jobs, with a dead-letter queue for the ones that fail | free tier covers 1M requests |
-| Lambda | the review worker that consumes the queue | free tier |
+| SQS | review jobs, with a dead-letter queue for the ones that fail. `REVIEW_QUEUE_URL` on the box and on the function is what turns the queue on | free tier covers 1M requests |
+| Lambda | the review worker that consumes the queue, image `sesume_backend_lambda`, command `dist/worker.handler` | free tier |
 | SNS | where alarms and Budgets notifications arrive | pennies |
 | CloudWatch | logs, an alarm on 5xx and instance status, a dashboard, and an EventBridge cron that curls the public hostname every five minutes | cents |
 | S3, optional | the built frontend, pulled at boot by the instance role | cents |
@@ -88,9 +88,9 @@ Two roles, no users, no access keys. Every ARN is scoped to the one queue, topic
 
 ## The async review, and why Lambda earns its place
 
-`POST /resumes/:id/review` currently holds the request open while the model writes, which is the shape that dies on a timeout. With a queue the API answers immediately, the worker retries, the dead-letter queue keeps the failures, and SNS can announce completion. That is one PR-sized change here: a job row, a status endpoint, a worker handler, and the frontend polling instead of awaiting.
+`POST /resumes/:id/review` answers 202 and puts a job on the queue; the worker writes the review and the dead-letter queue keeps the ones that keep failing. Without the queue the request holds open while the model writes, which is the shape that dies on the origin timeout.
 
-It also gives SQS, SNS, Lambda, CloudWatch and IAM real work. The alternative, putting the whole API on Lambda, buys nothing once the instance is already running, and it costs the in-process rate limiter its meaning.
+It also gives SQS, Lambda, CloudWatch and IAM real work. The alternative, putting the whole API on Lambda, buys nothing once the instance is already running, and it costs the in-process rate limiter its meaning.
 
 ## Traps
 
@@ -110,7 +110,7 @@ It also gives SQS, SNS, Lambda, CloudWatch and IAM real work. The alternative, p
 5. EC2 `t3.micro` with an Elastic IP and a role for SSM read, ECR pull, SQS send, CloudWatch logs. Source/destination check off. User data installs docker, cloudflared and nginx.
 6. Cloudflare: tunnel, public hostname to `http://localhost:8080`, cache rules above, WAF on, optional Access.
 7. SQS queue and dead-letter queue, the worker Lambda, the SNS topic and its email subscription.
-8. Migrations once from the instance, then alarms, Budgets, and the five-minute probe.
+8. Migrations once from the instance: `docker compose run --rm backend npm run migrate:up`. Then alarms, Budgets, and the five-minute probe.
 9. Smoke: page loads, `/api/healthz` ok, sign in, save a resume, open the preview, reload `/login` directly, enqueue a review and watch it land.
 
 ## Tune after measuring
