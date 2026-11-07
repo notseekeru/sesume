@@ -4,6 +4,15 @@ import routes from "./routes.js";
 
 export const app = new Hono().basePath("/api");
 
+const originToken = process.env.ORIGIN_TOKEN ?? "";
+
+// The Function URL is public. The edge nginx is the only caller that carries this header, so a
+// request that bypasses the edge never reaches the routes. Unset in local dev on purpose.
+app.use("*", async (c, next) => {
+    if (originToken !== "" && c.req.header("x-origin-token") !== originToken) return c.json({ detail: "Forbidden" }, 403);
+    await next();
+});
+
 app.get("/healthz", async (c) => {
     try {
         await pool.query("SELECT 1");
