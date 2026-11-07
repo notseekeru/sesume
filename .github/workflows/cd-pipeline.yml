@@ -8,13 +8,14 @@ on:
 permissions:
   contents: read
   packages: write
+  id-token: write
 
 concurrency:
   group: cd-${{ github.event.workflow_run.head_branch }}
   cancel-in-progress: true
 
 jobs:
-  build-and-push:
+  images:
     if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -29,13 +30,6 @@ jobs:
             suffix: sesume_backend
             port: 4100
             health: /api/healthz
-          - name: backend-lambda
-            dir: backend
-            dockerfile: backend/Dockerfile.lambda
-            platforms: linux/amd64
-            suffix: sesume_backend_lambda
-            port: 0
-            health: ""
           - name: frontend
             dir: frontend
             dockerfile: frontend/Dockerfile
@@ -94,7 +88,6 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.service.name }}
           cache-to: type=gha,mode=max,scope=${{ matrix.service.name }}
 
-      # var/lang and var/runtime are the runtime the Lambda base image ships, not this image's own dependencies.
       - name: Scan
         run: |
           docker run --rm \
@@ -102,12 +95,11 @@ jobs:
             -v "$PWD/.trivyignore.yaml:/.trivyignore.yaml" \
             aquasec/trivy:0.76.2 image \
             --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 \
-            --skip-dirs usr/local --skip-dirs root/.cache --skip-dirs var/lang --skip-dirs var/runtime \
+            --skip-dirs usr/local --skip-dirs root/.cache \
             --ignorefile /.trivyignore.yaml \
             "$IMAGE:$SHA"
 
       - name: Smoke test
-        if: matrix.service.health != ''
         run: |
           docker run -d --name smoke --network host \
             -e DATABASE_URL \
@@ -143,3 +135,96 @@ jobs:
       - name: Cleanup
         if: always()
         run: docker rm -f smoke || true
+
+  deploy:
+    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      SHA: ${{ github.event.workflow_run.head_sha }}
+      AWS_REGION: ap-southeast-1
+      REPOSITORY: sesume_backend_lambda
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Assume the deploy role
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: arn:aws:iam::566112927489:role/sesume-cd
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Resolve account
+        run: |
+          ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
+          echo "IMAGE=$ACCOUNT.dkr.ecr.$AWS_REGION.amazonaws.com/$REPOSITORY" >> "$GITHUB_ENV"
+          echo "BUCKET=sesume-dist-$ACCOUNT" >> "$GITHUB_ENV"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to ECR
+        run: aws ecr get-login-password | docker login --username AWS --password-stdin "${IMAGE%/*}"
+
+      - name: Build the lambda image
+        uses: docker/build-push-action@v7
+        with:
+          context: ./backend
+          file: backend/Dockerfile.lambda
+          load: true
+          push: false
+          tags: ${{ env.IMAGE }}:${{ env.SHA }}
+          cache-from: |
+            type=gha,scope=backend-lambda
+            type=gha,scope=backend
+          cache-to: type=gha,mode=max,scope=backend-lambda
+
+      - name: Scan
+        run: |
+          # var/lang and var/runtime are the runtime the Lambda base image ships, not this image's own dependencies.
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$PWD/.trivyignore.yaml:/.trivyignore.yaml" \
+            aquasec/trivy:0.76.2 image \
+            --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 \
+            --skip-dirs usr/local --skip-dirs root/.cache \
+            --skip-dirs var/lang --skip-dirs var/runtime \
+            --ignorefile /.trivyignore.yaml \
+            "$IMAGE:$SHA"
+
+      - name: Push the lambda image
+        run: docker push "$IMAGE:$SHA"
+
+      - name: Roll the functions
+        run: |
+          for function in api worker migrate; do
+            if aws lambda get-function --function-name "sesume-$function" >/dev/null 2>&1; then
+              aws lambda update-function-code \
+                --function-name "sesume-$function" \
+                --image-uri "$IMAGE:$SHA" \
+                --query 'FunctionName' --output text
+            else
+              echo "sesume-$function does not exist yet, skipped"
+            fi
+          done
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build the frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Upload the frontend
+        run: aws s3 sync frontend/dist "s3://$BUCKET/" --delete
