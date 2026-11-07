@@ -161,6 +161,14 @@ export interface ResumeReview {
     created_at: string;
 }
 
+export interface ReviewStatus {
+    status: "queued" | "done" | "failed";
+    error: string | null;
+}
+
+const REVIEW_POLL = 1500;
+const REVIEW_WAIT = 90_000;
+
 let account: boolean | null = null;
 let settle: (value: boolean) => void = () => undefined;
 const sessionReady = new Promise<boolean>((resolve) => {
@@ -258,17 +266,31 @@ export async function deleteResume(id: string): Promise<void> {
 }
 
 export async function getResumeReview(id: string): Promise<ResumeReview | null> {
-    if (await signedIn()) return request<ResumeReview | null>(`/resumes/${id}/review`);
+    if (await signedIn()) {
+        const got = await request<ResumeReview | ReviewStatus | null>(`/resumes/${id}/review`);
+        return got !== null && "levels" in got ? got : null;
+    }
     const row = localFind(id);
     return row.review === null ? null : { ...row.review, stale: row.reviewed !== row.text };
 }
 
 export async function reviewResume(id: string): Promise<ResumeReview> {
-    if (await signedIn()) return request<ResumeReview>(`/resumes/${id}/review`, { method: "POST", headers: llmHeaders() });
-    const row = localFind(id);
-    const review = await request<ResumeReview>("/review", { method: "POST", headers: { "content-type": "application/json", ...llmHeaders() }, body: JSON.stringify({ text: row.text }) });
-    localSave({ ...row, review, reviewed: row.text });
-    return review;
+    if (!(await signedIn())) {
+        const row = localFind(id);
+        const review = await request<ResumeReview>("/review", { method: "POST", headers: { "content-type": "application/json", ...llmHeaders() }, body: JSON.stringify({ text: row.text }) });
+        localSave({ ...row, review, reviewed: row.text });
+        return review;
+    }
+    const first = await request<ResumeReview | ReviewStatus>(`/resumes/${id}/review`, { method: "POST", headers: llmHeaders() });
+    if ("levels" in first) return first;
+    for (let waited = 0; waited < REVIEW_WAIT; waited += REVIEW_POLL) {
+        await new Promise((resolve) => setTimeout(resolve, REVIEW_POLL));
+        const next = await request<ResumeReview | ReviewStatus | null>(`/resumes/${id}/review`);
+        if (next === null) throw new ApiError(502, "The review went missing before it finished.");
+        if ("levels" in next) return next;
+        if (next.status === "failed") throw new ApiError(502, next.error ?? "The review failed.");
+    }
+    throw new ApiError(504, "The review is still running. Reload in a moment.");
 }
 
 export async function retryRewrite(id: string, source: string): Promise<ResumeReview> {

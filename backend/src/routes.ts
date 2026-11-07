@@ -9,9 +9,12 @@ import { open, seal } from "./crypto.js";
 import { pool } from "./db.js";
 import * as latex from "./latex.js";
 import { configFrom, isStub, reviewResume, rewriteLine } from "./llm.js";
+import { providerAad, providerHeaders, storedProvider } from "./provider.js";
+import { enqueue, queueConfigured } from "./queue.js";
 import { limit } from "./rate.js";
 import { ExtractError, extractPdf, LIMITS, sanitize, TOO_LARGE } from "./resumes.js";
 import { claim, LINE_MAX, MAX_REWRITES, quotedBy, type ReviewBody, readsAt, sourceHash, validReview } from "./review.js";
+import { ReviewJobError, reviewAad, runReview, textAad } from "./reviewJob.js";
 
 const RESUME_COLS = "id::text, name, created_at, updated_at";
 const RESUME_COLS_WITH_TEXT = `${RESUME_COLS}, text`;
@@ -60,27 +63,10 @@ function resumeBody(text: unknown): string {
     return saved;
 }
 
-const textAad = (id: string) => `resumes.text:${id}`;
-const reviewAad = (id: string) => `resume_reviews.review:${id}`;
-const providerAad = (id: string, field: string) => `provider_configs.${field}:${id}`;
 const PROVIDER_CAP = { baseUrl: 500, model: 200, key: 500 };
 
 function cut(value: unknown, max: number): string {
     return typeof value === "string" ? value.trim().slice(0, max) : "";
-}
-
-async function storedProvider(userId: string): Promise<Row | null> {
-    return one("SELECT base_url, model, api_key FROM provider_configs WHERE user_id = $1", [userId]);
-}
-
-async function providerHeaders(userId: string, headers: Headers): Promise<Headers> {
-    const row = await storedProvider(userId);
-    if (row === null) return headers;
-    const out = new Headers(headers);
-    out.set("x-llm-base-url", open(String(row.base_url), providerAad(userId, "base_url")));
-    out.set("x-llm-model", open(String(row.model), providerAad(userId, "model")));
-    out.set("x-llm-key", open(String(row.api_key), providerAad(userId, "api_key")));
-    return out;
 }
 
 function readReview(value: unknown, id: string): unknown {
@@ -259,31 +245,42 @@ routes.get("/resumes/:id/review", guard, async (c) => {
     const id = c.req.param("id");
     const found = UUID.test(id)
         ? await one(
-              `SELECT rr.review, rr.source_hash, rr.created_at, r.text
+              `SELECT rr.review, rr.source_hash, rr.created_at, rr.status, rr.error, r.text
                FROM resume_reviews rr JOIN resumes r ON r.id = rr.resume_id
                WHERE rr.resume_id = $1 AND r.user_id = $2`,
               [id, c.get("user").id],
           )
         : null;
     if (found === null) return c.json(null);
+    if (found.status !== "done") return c.json({ status: found.status, error: found.error });
     const fresh = found.source_hash === sourceHash(open(String(found.text), textAad(id)));
     return reviewJson(readReview(found.review, id), found.created_at, fresh);
 });
 
 routes.post("/resumes/:id/review", guard, async (c) => {
     const id = c.req.param("id");
-    const found = UUID.test(id) ? await one("SELECT text FROM resumes WHERE id = $1 AND user_id = $2", [id, c.get("user").id]) : null;
+    const userId = c.get("user").id;
+    const found = UUID.test(id) ? await one("SELECT text FROM resumes WHERE id = $1 AND user_id = $2", [id, userId]) : null;
     if (found === null) throw new Problem(404, "Resume not found");
     const text = open(String(found.text), textAad(id));
-    const config = configFrom(await providerHeaders(c.get("user").id, c.req.raw.headers));
-    if (isStub(config)) throw new Problem(503, "No scoring engine is configured on this deployment, so a review cannot run.");
-    const got = await reviewResume(text, config);
-    if (got === null) throw new Problem(503, "The reviewer could not read this resume right now. Try again in a moment.");
-    const saved = await one("INSERT INTO resume_reviews (resume_id, source_hash, review) VALUES ($1, $2, $3) ON CONFLICT (resume_id) DO UPDATE SET source_hash = EXCLUDED.source_hash, review = EXCLUDED.review, created_at = now() RETURNING review, created_at", [
-        id,
-        sourceHash(text),
-        seal(JSON.stringify(got), reviewAad(id)),
-    ]);
+    if (queueConfigured && (await storedProvider(userId)) !== null) {
+        await sql("INSERT INTO resume_reviews (resume_id, source_hash, review, status, error) VALUES ($1, $2, NULL, 'queued', NULL) ON CONFLICT (resume_id) DO UPDATE SET source_hash = EXCLUDED.source_hash, status = 'queued', error = NULL, created_at = now()", [id, sourceHash(text)]);
+        try {
+            await enqueue({ resumeId: id, userId });
+        } catch (error) {
+            console.error("review.enqueue.failed", error instanceof Error ? error.message : error);
+            await sql("UPDATE resume_reviews SET status = 'failed', error = $2 WHERE resume_id = $1", [id, "The review queue refused the job."]);
+            throw new Problem(503, "The review queue is unavailable. Try again in a moment.");
+        }
+        return c.json({ status: "queued" }, 202);
+    }
+    try {
+        await runReview(id, userId, c.req.raw.headers);
+    } catch (error) {
+        if (error instanceof ReviewJobError) throw new Problem(503, error.message);
+        throw error;
+    }
+    const saved = await one("SELECT review, created_at FROM resume_reviews WHERE resume_id = $1", [id]);
     return reviewJson(readReview(saved?.review, id), saved?.created_at, true, 201);
 });
 
