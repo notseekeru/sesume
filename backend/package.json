@@ -16,6 +16,7 @@
         "migrate:create": "node-pg-migrate create"
     },
     "dependencies": {
+        "@aws-sdk/client-sqs": "3.1164.0",
         "@hono/node-server": "2.1.5",
         "hono": "4.13.14",
         "node-pg-migrate": "9.0.0",
