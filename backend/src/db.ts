@@ -5,7 +5,7 @@ if (!databaseUrl) throw new Error("DATABASE_URL is required");
 
 export const pool = new Pool({
     connectionString: databaseUrl,
-    max: Number(process.env.DATABASE_POOL_MAX ?? 10),
+    max: Number(process.env.DATABASE_POOL_MAX ?? 1),
     connectionTimeoutMillis: 2000,
     statement_timeout: 5000,
     query_timeout: 5000,
