@@ -12,7 +12,11 @@ async function build(): Promise<LambdaHandler> {
 }
 
 export const handler: LambdaHandler = async (event, context) => {
-    built ??= build();
+    // Same reason as bootstrap: a failed build is retried on the next invocation, not cached.
+    built ??= build().catch((error: unknown) => {
+        built = null;
+        throw error;
+    });
     const run = await built;
     return run(event, context);
 };

@@ -22,7 +22,7 @@ export function jobOf(body: string): { resumeId: string; userId: string } | null
 export async function handler(event: SqsEvent): Promise<SqsResult> {
     await ready();
     const { pool } = await import("./db.js");
-    const { runReview } = await import("./reviewJob.js");
+    const { ReviewJobError, runReview } = await import("./reviewJob.js");
 
     const batchItemFailures: { itemIdentifier: string }[] = [];
     for (const record of event.Records) {
@@ -36,6 +36,8 @@ export async function handler(event: SqsEvent): Promise<SqsResult> {
         } catch (error) {
             const message = error instanceof Error ? error.message : "Review failed.";
             await pool.query("UPDATE resume_reviews SET status = 'failed', error = $2 WHERE resume_id = $1", [job.resumeId, message.slice(0, 500)]).catch(() => undefined);
+            // A deterministic failure is acknowledged: redelivering it only reaches the DLQ later.
+            if (error instanceof ReviewJobError && error.permanent) continue;
             batchItemFailures.push({ itemIdentifier: record.messageId });
         }
     }

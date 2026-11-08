@@ -19,7 +19,12 @@ let loaded: Promise<void> | null = null;
 // start. Upgrade path: read the parameters into a cached object and pass it explicitly.
 export function ready(): Promise<void> {
     if (prefix === "") return Promise.resolve();
-    loaded ??= load();
+    // A rejected promise must not be cached, or one transient SSM failure kills every later
+    // invocation in this container.
+    loaded ??= load().catch((error: unknown) => {
+        loaded = null;
+        throw error;
+    });
     return loaded;
 }
 

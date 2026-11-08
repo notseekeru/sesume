@@ -24,6 +24,9 @@ const refused = [
     "https://[::1]/v1",
     "https://[fd00::1]/v1",
     "https://user:pass@api.example.com/v1",
+    "https://localhost./v1",
+    "https://db.internal./v1",
+    "https://10.0.0.1./v1",
     "not a url",
     "",
 ];
