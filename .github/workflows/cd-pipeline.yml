@@ -258,4 +258,4 @@ jobs:
           npm run build
 
       - name: Upload the frontend
-        run: aws s3 sync frontend/dist "s3://$BUCKET/" --delete
+        run: aws s3 sync frontend/dist "s3://$BUCKET/" --delete --exclude "bootstrap/*"
