@@ -2,11 +2,11 @@
 
 ```mermaid
 flowchart TD
-  U["users"] -->|HTTPS| CF["Cloudflare edge<br/>TLS · DDoS · WAF · cache"]
+  U["users"] -->|HTTPS| CF["Cloudflare edge<br/>TLS · DDoS · cache"]
   CF -->|outbound tunnel| N
 
   subgraph E["EC2 t4g.micro · public subnet · Elastic IP"]
-    NAT["iptables MASQUERADE"]
+    NAT["nft masquerade"]
     N["nginx 127.0.0.1:8080<br/>static from disk · /api proxied"]
   end
 
@@ -28,6 +28,7 @@ flowchart TD
   CW["CloudWatch alarms"] -.-> S["SNS email"]
   CW --- A
   CW --- L
+  PRB["EventBridge probe, every 5 minutes"] -.-> CW
 ```
 
 ## IAM
