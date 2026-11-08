@@ -46,7 +46,8 @@ Two roles for AWS services, one for CI, no users, no access keys. Every ARN is s
 |                       | `logs:CreateLogStream`, `logs:PutLogEvents`                                                                     | its own logs                                                                               |
 | GitHub Actions        | `sts:AssumeRoleWithWebIdentity`, restricted to `refs/heads/main` of the sesume repository                        | no long-lived keys                                                                         |
 |                       | `ecr` push on the lambda repository, `s3:PutObject`, `s3:DeleteObject`, `s3:ListBucket` on the dist bucket    | the image and the built frontend                                                           |
-|                       | `lambda:UpdateFunctionCode`, `lambda:GetFunction` on `sesume-*`                                                  | rolling the image without an apply                                                         |
+|                       | `lambda:UpdateFunctionCode`, `lambda:GetFunction`, `lambda:GetFunctionConfiguration` on `sesume-*`                | rolling the image without an apply                                                         |
+|                       | `lambda:InvokeFunction` on the migration function                                                               | running the pending migrations before the API rolls, and failing the run when one fails    |
 | RDS                   | none                                                                                                            | `rds-monitoring-role` only with Enhanced Monitoring                                        |
 
 ## What is deliberately absent
