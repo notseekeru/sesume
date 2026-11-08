@@ -25,6 +25,16 @@ export function available(): boolean {
 
 // AI HERE: one engine, one pass. Ceiling: a document that needs bibtex or a second pass renders with
 // unresolved references. Upgrade path: rerun when the log asks for it.
+// pdflatex prints every file kpathsea opens to stdout, so the captured output can end mid-preamble
+// before the error line appears. main.log always carries it, so that is the one to read.
+async function failureReason(workdir: string, output: string): Promise<string> {
+    try {
+        return firstError(await readFile(join(workdir, "main.log"), "utf8"));
+    } catch {
+        return firstError(output);
+    }
+}
+
 function firstError(log: string): string {
     const lines = log
         .split("\n")
@@ -94,7 +104,7 @@ async function run(source: string): Promise<Uint8Array<ArrayBuffer>> {
         const output = Buffer.concat(chunks).toString("utf8").slice(0, MAX_OUTPUT);
 
         if (timedOut) throw new CompileError(`pdflatex ran longer than ${COMPILE_TIMEOUT / 1000}s. Check the document for a runaway command.`);
-        if (code !== 0) throw new CompileError(firstError(output));
+        if (code !== 0) throw new CompileError(await failureReason(workdir, output));
         try {
             return Uint8Array.from(await readFile(join(workdir, "main.pdf")));
         } catch {
