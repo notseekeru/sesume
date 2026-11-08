@@ -1,3 +1,4 @@
+import { baseUrlAllowed } from "./provider.js";
 import { claim, extractJsonObject, LEVEL_LABELS, LINE_MAX, MAX_LINES, MAX_REWRITES, MAX_SECTIONS, type ReviewBody, RUNGS, validReview } from "./review.js";
 
 const ENV_BASE = (process.env.LLM_BASE_URL ?? "").trim().replace(/\/+$/, "");
@@ -206,6 +207,11 @@ function host(config: LlmConfig): string {
 }
 
 async function completion(system: string, userText: string, config: LlmConfig, options: { maxTokens: number; stage: string; schema: object | null; temperature?: number }): Promise<string | null> {
+    // Rechecked here, not only on save, so a row written before the rule existed cannot be used.
+    if (config.byok && !baseUrlAllowed(config.baseUrl)) {
+        console.warn("llm.blocked_base_url", host(config));
+        return null;
+    }
     const payload: Record<string, unknown> = {
         model: config.model,
         messages: [
