@@ -9,7 +9,7 @@ import { open, seal } from "./crypto.js";
 import { pool } from "./db.js";
 import * as latex from "./latex.js";
 import { configFrom, isStub, reviewResume, rewriteLine, serverConfigured } from "./llm.js";
-import { providerAad, providerHeaders, storedProvider } from "./provider.js";
+import { baseUrlAllowed, providerAad, providerHeaders, storedProvider } from "./provider.js";
 import { enqueue, queueConfigured } from "./queue.js";
 import { limit } from "./rate.js";
 import { ExtractError, extractPdf, LIMITS, sanitize, TOO_LARGE } from "./resumes.js";
@@ -173,6 +173,7 @@ routes.put("/provider", guard, jsonLimit, async (c) => {
     const userId = c.get("user").id;
     const input = await body<{ baseUrl?: unknown; model?: unknown; key?: unknown }>(c);
     const baseUrl = cut(input.baseUrl, PROVIDER_CAP.baseUrl);
+    if (baseUrl !== "" && !baseUrlAllowed(baseUrl)) throw new Problem(422, "That base URL is not allowed. Use an https endpoint on a public host.");
     const model = cut(input.model, PROVIDER_CAP.model);
     const key = cut(input.key, PROVIDER_CAP.key);
     const existing = await storedProvider(userId);
