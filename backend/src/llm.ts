@@ -19,13 +19,19 @@ export interface LlmConfig {
     byok: boolean;
 }
 
+// A stored provider supplies its own base, model and key, and nothing is borrowed from the
+// deployment when it does. The `|| ENV_*` fallbacks used to leak the shared key to whatever
+// endpoint a user saved with an empty key, so they only apply when no provider was supplied.
 export function configFrom(headers: Headers): LlmConfig {
     const baseUrl = (headers.get("x-llm-base-url") ?? "").trim().replace(/\/+$/, "");
+    if (baseUrl === "") {
+        return { baseUrl: ENV_BASE, model: ENV_MODEL, apiKey: ENV_KEY, byok: false };
+    }
     return {
-        baseUrl: baseUrl || ENV_BASE,
-        model: (headers.get("x-llm-model") ?? "").trim() || ENV_MODEL,
-        apiKey: (headers.get("x-llm-key") ?? "").trim() || ENV_KEY,
-        byok: baseUrl !== "",
+        baseUrl,
+        model: (headers.get("x-llm-model") ?? "").trim(),
+        apiKey: (headers.get("x-llm-key") ?? "").trim(),
+        byok: true,
     };
 }
 
