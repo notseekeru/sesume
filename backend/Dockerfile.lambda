@@ -14,7 +14,7 @@ FROM public.ecr.aws/lambda/nodejs:22 AS prod
 
 # The preview compiles LaTeX inside the function (src/latex.ts), and the Lambda base image is Amazon
 # Linux 2023, so the engine comes from the distribution rather than the Alpine set in Dockerfile.
-RUN microdnf install -y texlive-latex texlive-geometry texlive-hyperref texlive-lm texlive-ec texlive-enumitem texlive-titlesec texlive-charter \
+RUN microdnf install -y texlive-latex texlive-geometry texlive-hyperref texlive-lm texlive-ec texlive-enumitem texlive-titlesec texlive-charter texlive-dvips \
     && microdnf clean all \
     && rm -rf /usr/share/texlive/texmf-dist/doc /usr/share/texlive/texmf-dist/source
 
