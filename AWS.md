@@ -20,7 +20,7 @@ flowchart TD
   L --> DB
   L -.->|egress| NAT
   M["migrate Lambda"] --> DB
-  P["SSM SecureString<br/>DATABASE_URL · AUTH_SECRET · DATA_KEY · ORIGIN_TOKEN · TUNNEL_TOKEN"] --> A
+  P["SSM SecureString<br/>DATABASE_URL · AUTH_SECRET · DATA_KEY · ORIGIN_TOKEN · TUNNEL_TOKEN<br/>LLM_BASE_URL · LLM_MODEL · LLM_API_KEY"] --> A
   P --> L
   P --> N
   R["ECR lambda image"] --> A
