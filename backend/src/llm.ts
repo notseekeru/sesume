@@ -32,6 +32,12 @@ export function isStub(config: LlmConfig): boolean {
     return !config.baseUrl || !config.model;
 }
 
+// A deployment-wide fallback exists when both of these are set, which is what lets a user with no
+// provider of their own still queue a review instead of waiting on it inside the API function.
+export function serverConfigured(): boolean {
+    return ENV_BASE !== "" && ENV_MODEL !== "";
+}
+
 const GROUNDING_PROMPT =
     "Grounding: every fact you state about the candidate has to be one they actually wrote or attached. Never give them an employer, project, technology, number, team or claim they did not state, and never turn a vague detail into a specific one. If you need a specific to ask a good question, ask them for it.";
 

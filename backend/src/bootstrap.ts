@@ -7,6 +7,9 @@ const envNames: Record<string, string> = {
     auth_secret: "AUTH_SECRET",
     data_key: "DATA_KEY",
     origin_token: "ORIGIN_TOKEN",
+    llm_base_url: "LLM_BASE_URL",
+    llm_model: "LLM_MODEL",
+    llm_api_key: "LLM_API_KEY",
 };
 
 let loaded: Promise<void> | null = null;
