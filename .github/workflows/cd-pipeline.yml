@@ -233,7 +233,7 @@ jobs:
 
       - name: Roll the functions
         run: |
-          for function in api worker; do
+          for function in api worker probe; do
             if aws lambda get-function --function-name "sesume-$function" >/dev/null 2>&1; then
               aws lambda update-function-code \
                 --function-name "sesume-$function" \
