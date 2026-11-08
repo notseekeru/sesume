@@ -8,7 +8,7 @@ import { clear, guard, hashPassword, issue, type Session, verifyPassword } from 
 import { open, seal } from "./crypto.js";
 import { pool } from "./db.js";
 import * as latex from "./latex.js";
-import { configFrom, isStub, reviewResume, rewriteLine } from "./llm.js";
+import { configFrom, isStub, reviewResume, rewriteLine, serverConfigured } from "./llm.js";
 import { providerAad, providerHeaders, storedProvider } from "./provider.js";
 import { enqueue, queueConfigured } from "./queue.js";
 import { limit } from "./rate.js";
@@ -263,7 +263,8 @@ routes.post("/resumes/:id/review", guard, async (c) => {
     const found = UUID.test(id) ? await one("SELECT text FROM resumes WHERE id = $1 AND user_id = $2", [id, userId]) : null;
     if (found === null) throw new Problem(404, "Resume not found");
     const text = open(String(found.text), textAad(id));
-    if (queueConfigured && (await storedProvider(userId)) !== null) {
+    const engine = (await storedProvider(userId)) !== null || serverConfigured();
+    if (queueConfigured && engine) {
         await sql("INSERT INTO resume_reviews (resume_id, source_hash, review, status, error) VALUES ($1, $2, NULL, 'queued', NULL) ON CONFLICT (resume_id) DO UPDATE SET source_hash = EXCLUDED.source_hash, status = 'queued', error = NULL, created_at = now()", [id, sourceHash(text)]);
         try {
             await enqueue({ resumeId: id, userId });
