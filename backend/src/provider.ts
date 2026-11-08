@@ -7,7 +7,9 @@ export const providerAad = (id: string, field: string) => `provider_configs.${fi
 const BLOCKED_HOST = /^(localhost|metadata|metadata\.google\.internal)$/i;
 const BLOCKED_SUFFIX = /\.(local|internal|localhost)$/i;
 
-function publicHost(host: string): boolean {
+function publicHost(raw: string): boolean {
+    // url.hostname keeps a trailing dot, which walks past every test below.
+    const host = raw.replace(/\.$/, "");
     const family = isIP(host);
     if (family === 0) return !((BLOCKED_HOST.test(host) || BLOCKED_SUFFIX.test(host)) === true);
     if (family === 4) {
@@ -40,7 +42,6 @@ export function baseUrlAllowed(raw: string): boolean {
     if (url.username !== "" || url.password !== "") return false;
     return publicHost(url.hostname.replace(/^\[|\]$/g, ""));
 }
-
 export type ProviderRow = { base_url: string; model: string; api_key: string };
 
 export async function storedProvider(userId: string): Promise<ProviderRow | null> {

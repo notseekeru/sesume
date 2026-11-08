@@ -240,6 +240,8 @@ async function completion(system: string, userText: string, config: LlmConfig, o
                 headers: { "content-type": "application/json", ...(config.apiKey ? { authorization: `Bearer ${config.apiKey}` } : {}) },
                 body: JSON.stringify(body),
                 signal: AbortSignal.timeout(TIMEOUT_MS),
+                // A redirect leaves the host that baseUrlAllowed approved and posts the body there.
+                redirect: "manual",
             });
         } catch (error) {
             console.warn(`llm.${options.stage}.transport_error`, (error as Error).name, host(config));
