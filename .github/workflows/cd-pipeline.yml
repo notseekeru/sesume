@@ -99,6 +99,23 @@ jobs:
             --ignorefile /.trivyignore.yaml \
             "$IMAGE:$SHA"
 
+      - name: SBOM
+        run: |
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$PWD:/out" \
+            aquasec/trivy:0.76.2 image \
+            --format cyclonedx \
+            --output "/out/sbom-${{ matrix.service.name }}.cdx.json" \
+            "$IMAGE:$SHA"
+
+      - name: Upload the SBOM
+        uses: actions/upload-artifact@v7
+        with:
+          name: sbom-${{ matrix.service.name }}
+          path: sbom-${{ matrix.service.name }}.cdx.json
+          retention-days: 30
+
       - name: Smoke test
         run: |
           docker run -d --name smoke --network host \
