@@ -61,5 +61,5 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Audit (informational)
-        run: npm audit --audit-level=moderate || true
+      - name: Audit
+        run: npm audit --audit-level=high
