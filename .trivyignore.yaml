@@ -1,3 +1,12 @@
+misconfigurations:
+  - id: DS-0002
+    paths:
+      - backend/Dockerfile.lambda
+    statement: >-
+      The Lambda base image starts the function as root inside a per-invocation sandbox, and the handler
+      writes only to /tmp. Setting a USER means chowning ${LAMBDA_TASK_ROOT} and the texlive tree, which
+      no test here can confirm before the deploy replaces the live function.
+    expired_at: 2027-02-01
 vulnerabilities:
   - id: CVE-2023-32700
     statement: >-
