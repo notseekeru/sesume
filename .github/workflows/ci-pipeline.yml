@@ -7,12 +7,14 @@ on:
       - "frontend/**"
       - "backend/**"
       - ".github/workflows/**"
+      - ".trivyignore.yaml"
   push:
     branches: [main]
     paths:
       - "frontend/**"
       - "backend/**"
       - ".github/workflows/**"
+      - ".trivyignore.yaml"
   workflow_dispatch:
 
 concurrency:
