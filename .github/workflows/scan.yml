@@ -13,47 +13,77 @@ permissions:
   contents: read
 
 jobs:
-  dependencies:
+  report:
     runs-on: ubuntu-latest
     permissions:
       contents: read
       issues: write
+      actions: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
-      - name: Install osv-scanner
+      - name: Scan the dependencies
         run: |
-          curl -sSfL -o /usr/local/bin/osv-scanner https://github.com/google/osv-scanner/releases/download/v2.7.1/osv-scanner_linux_amd64
-          chmod +x /usr/local/bin/osv-scanner
+          docker run --rm -v "$PWD:/src" aquasec/trivy:0.76.2 fs \
+            --scanners vuln --severity HIGH,CRITICAL --quiet \
+            --format json --output /src/deps.json /src
 
-      - name: Scan
-        run: osv-scanner scan source -r . --format json > /tmp/osv.json 2>/dev/null || true
+      - name: Scan the container definitions
+        run: |
+          IGNORE=""
+          if [ -f .trivyignore.yaml ]; then IGNORE="--ignorefile /src/.trivyignore.yaml"; fi
+          docker run --rm -v "$PWD:/src" aquasec/trivy:0.76.2 config \
+            --severity HIGH,CRITICAL --quiet $IGNORE \
+            --format json --output /src/config.json /src
 
-      - name: Report
+      - name: Fetch the scorecard results
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          rows=$(jq -r '[.results[].packages[] | .package as $p | .vulnerabilities[] | "| \($p.name) | \($p.version) | \(.id) | \((.summary // "") | .[0:70] | gsub("\\|"; "/")) |"] | unique | .[]' /tmp/osv.json)
-          open=$(gh issue list --label security --state open --search "Dependency scan in:title" --json number --jq '.[0].number // empty')
+          id=$(gh run list --workflow Scorecard --limit 1 --json databaseId --jq '.[0].databaseId')
+          gh run download "$id" -n scorecard-results -D /tmp/sc 2>/dev/null || echo "no scorecard artifact" > /tmp/sc/results.json
 
-          if [ -z "$rows" ]; then
-            if [ -n "$open" ]; then gh issue close "$open" --comment "Clean on $(date -u +%F)."; fi
-            exit 0
-          fi
+      - name: File the findings
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -uo pipefail
+          gh label create security --color B60205 --description "Weakens the security posture" >/dev/null 2>&1 || true
+          touch /tmp/filed
 
-          body=/tmp/body.md
-          {
-            echo "osv-scanner found $(printf '%s\n' "$rows" | wc -l) findings on $(date -u +%F)."
-            echo
-            echo "| package | version | id | summary |"
-            echo "| --- | --- | --- | --- |"
-            printf '%s\n' "$rows"
-            echo
-            echo "Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
-          } > "$body"
+          file_issue() {
+            title=$1
+            body=$2
+            n=$(gh issue list --label security --state open --json number,title --jq ".[]|select(.title==\"$title\")|.number" | head -1)
+            if [ -n "$n" ]; then gh issue edit "$n" --body "$body" >/dev/null
+            else gh issue create --title "$title" --label security --body "$body" >/dev/null; fi
+            printf '%s\n' "$title" >> /tmp/filed
+          }
 
-          if [ -n "$open" ]; then
-            gh issue edit "$open" --body-file "$body"
-          else
-            gh issue create --title "Dependency scan" --label security --body-file "$body"
-          fi
+          while IFS=$'\t' read -r id sev pkgs; do
+            [ -z "${id:-}" ] && continue
+            file_issue "security(deps): $id" "$(printf '**%s**, severity %s.\n\n%s\n\nRun: %s/%s/actions/runs/%s\n' "$id" "$sev" "$(printf '%s' "$pkgs" | tr ';' '\n')" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+          done < <(jq -r '[.Results[]?.Vulnerabilities[]?] | group_by(.VulnerabilityID)[] | "\(.[0].VulnerabilityID)\t\(.[0].Severity)\t\(map("\(.PkgName) \(.InstalledVersion) -> fixed in \(.FixedVersion // "none")")|join(";"))"' deps.json)
+
+          while IFS=$'\t' read -r id sev where; do
+            [ -z "${id:-}" ] && continue
+            file_issue "security(config): $id" "$(printf '**%s**, severity %s.\n\n%s\n\nRun: %s/%s/actions/runs/%s\n' "$id" "$sev" "$(printf '%s' "$where" | tr ';' '\n')" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+          done < <(jq -r '[.Results[]? | .Target as $t | .Misconfigurations[]? | {id:.ID, t:$t, title:.Title, sev:.Severity}] | group_by(.id)[] | "\(.[0].id)\t\(.[0].sev)\t\(map("\(.t): \(.title)")|join(";"))"' config.json)
+
+          # Structural checks are left out on purpose: Code-Review needs a second reviewer,
+          # Contributors an organisation, CII and Fuzzing an application, Signed-Releases a release
+          # cadence. Filing them every night would train the reader to ignore this report.
+          while IFS=$'\t' read -r name score reason; do
+            [ -z "${name:-}" ] && continue
+            file_issue "security(hygiene): $name" "$(printf 'Scorecard gives **%s** %s/10.\n\n%s\n\nRun: %s/%s/actions/runs/%s\n' "$name" "$score" "$reason" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID")"
+          done < <(jq -r '
+            [.checks[] | select(.score >= 0 and .score < 10)
+             | select(.name | IN("Branch-Protection","Token-Permissions","Pinned-Dependencies","Security-Policy","Dangerous-Workflow","Vulnerabilities","CI-Tests","License"))
+             | "\(.name)\t\(.score)\t\((.reason // "") | .[0:300] | gsub("\n"; " "))"]
+            | .[]'  /tmp/sc/results.json 2>/dev/null)
+
+          gh issue list --label security --state open --json number,title --jq '.[]|"\(.number)\t\(.title)"' |
+          while IFS=$'\t' read -r n t; do
+            case "$t" in security\(deps\)*|security\(config\)*|security\(hygiene\)*) ;; *) continue;; esac
+            if ! grep -qxF "$t" /tmp/filed; then gh issue close "$n" --comment "No longer reported by the nightly scan." >/dev/null; fi
+          done
