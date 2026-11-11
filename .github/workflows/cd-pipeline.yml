@@ -53,7 +53,7 @@ jobs:
       DATA_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
     services:
       postgres:
-        image: postgres:18-alpine
+        image: postgres:18-alpine@sha256:123b17998ccaf47e53b502e8c6a1e79afd8f579c6f3eec83c563da026f957395
         env:
           POSTGRES_USER: sesume
           POSTGRES_PASSWORD: sesume
@@ -67,25 +67,25 @@ jobs:
           --health-retries 10
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ github.sha }}
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
 
       - name: Log in to GHCR
-        uses: docker/login-action@v4
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build for the gates
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
         with:
           context: ./${{ matrix.service.dir }}
           file: ${{ matrix.service.dockerfile }}
@@ -125,7 +125,7 @@ jobs:
             "$IMAGE:$SHA"
 
       - name: Upload the SBOM
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: sbom-${{ matrix.service.name }}
           path: sbom-${{ matrix.service.name }}.cdx.json
@@ -148,7 +148,7 @@ jobs:
           exit 1
 
       - name: Push multi-arch image
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
         with:
           context: ./${{ matrix.service.dir }}
           file: ${{ matrix.service.dockerfile }}
@@ -181,12 +181,12 @@ jobs:
       REPOSITORY: sesume_backend_lambda
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ github.sha }}
 
       - name: Assume the deploy role
-        uses: aws-actions/configure-aws-credentials@v6
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6
         with:
           role-to-assume: arn:aws:iam::566112927489:role/sesume-cd
           aws-region: ${{ env.AWS_REGION }}
@@ -197,16 +197,16 @@ jobs:
           echo "IMAGE=$ACCOUNT.dkr.ecr.$AWS_REGION.amazonaws.com/$REPOSITORY" >> "$GITHUB_ENV"
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
 
       - name: Log in to ECR
         run: aws ecr get-login-password | docker login --username AWS --password-stdin "${IMAGE%/*}"
 
       - name: Build the lambda image
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
         with:
           context: ./backend
           file: backend/Dockerfile.lambda
@@ -242,7 +242,7 @@ jobs:
             "$IMAGE:$SHA"
 
       - name: Upload the SBOM
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: sbom-lambda
           path: sbom-lambda.cdx.json
@@ -306,12 +306,12 @@ jobs:
       AWS_REGION: ap-southeast-1
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ github.sha }}
 
       - name: Assume the deploy role
-        uses: aws-actions/configure-aws-credentials@v6
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6
         with:
           role-to-assume: arn:aws:iam::566112927489:role/sesume-cd
           aws-region: ${{ env.AWS_REGION }}
@@ -320,7 +320,7 @@ jobs:
         run: echo "BUCKET=sesume-dist-$(aws sts get-caller-identity --query Account --output text)" >> "$GITHUB_ENV"
 
       - name: Set up Node
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 24
           cache: npm
