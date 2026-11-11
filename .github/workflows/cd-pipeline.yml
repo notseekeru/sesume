@@ -158,7 +158,7 @@ jobs:
         if: always()
         run: docker rm -f smoke || true
 
-  deploy:
+  deploy-lambda:
     needs: gate
     runs-on: ubuntu-latest
     timeout-minutes: 40
@@ -182,7 +182,6 @@ jobs:
         run: |
           ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
           echo "IMAGE=$ACCOUNT.dkr.ecr.$AWS_REGION.amazonaws.com/$REPOSITORY" >> "$GITHUB_ENV"
-          echo "BUCKET=sesume-dist-$ACCOUNT" >> "$GITHUB_ENV"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v4
@@ -266,10 +265,31 @@ jobs:
             fi
           done
 
+  deploy-frontend:
+    needs: gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      AWS_REGION: ap-southeast-1
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Assume the deploy role
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: arn:aws:iam::566112927489:role/sesume-cd
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Resolve the bucket
+        run: echo "BUCKET=sesume-dist-$(aws sts get-caller-identity --query Account --output text)" >> "$GITHUB_ENV"
+
       - name: Set up Node
         uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
