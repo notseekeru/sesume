@@ -1,0 +1,59 @@
+name: Scan
+
+on:
+  schedule:
+    - cron: "0 4 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: scan-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  dependencies:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Install osv-scanner
+        run: |
+          curl -sSfL -o /usr/local/bin/osv-scanner https://github.com/google/osv-scanner/releases/download/v2.7.1/osv-scanner_linux_amd64
+          chmod +x /usr/local/bin/osv-scanner
+
+      - name: Scan
+        run: osv-scanner scan source -r . --format json > /tmp/osv.json 2>/dev/null || true
+
+      - name: Report
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          rows=$(jq -r '[.results[].packages[] | .package as $p | .vulnerabilities[] | "| \($p.name) | \($p.version) | \(.id) | \((.summary // "") | .[0:70] | gsub("\\|"; "/")) |"] | unique | .[]' /tmp/osv.json)
+          open=$(gh issue list --label security --state open --search "Dependency scan in:title" --json number --jq '.[0].number // empty')
+
+          if [ -z "$rows" ]; then
+            if [ -n "$open" ]; then gh issue close "$open" --comment "Clean on $(date -u +%F)."; fi
+            exit 0
+          fi
+
+          body=/tmp/body.md
+          {
+            echo "osv-scanner found $(printf '%s\n' "$rows" | wc -l) findings on $(date -u +%F)."
+            echo
+            echo "| package | version | id | summary |"
+            echo "| --- | --- | --- | --- |"
+            printf '%s\n' "$rows"
+            echo
+            echo "Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          } > "$body"
+
+          if [ -n "$open" ]; then
+            gh issue edit "$open" --body-file "$body"
+          else
+            gh issue create --title "Dependency scan" --label security --body-file "$body"
+          fi
