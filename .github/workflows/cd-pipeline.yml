@@ -218,6 +218,23 @@ jobs:
             --ignorefile /.trivyignore.yaml \
             "$IMAGE:$SHA"
 
+      - name: SBOM
+        run: |
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$PWD:/out" \
+            aquasec/trivy:0.76.2 image \
+            --format cyclonedx \
+            --output /out/sbom-lambda.cdx.json \
+            "$IMAGE:$SHA"
+
+      - name: Upload the SBOM
+        uses: actions/upload-artifact@v7
+        with:
+          name: sbom-lambda
+          path: sbom-lambda.cdx.json
+          retention-days: 30
+
       - name: Push the lambda image
         run: docker push "$IMAGE:$SHA"
 
