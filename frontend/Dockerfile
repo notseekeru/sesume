@@ -1,4 +1,4 @@
-FROM node:lts-alpine3.24 AS base
+FROM node:24-alpine3.24 AS base
 
 WORKDIR /app
 

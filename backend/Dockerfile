@@ -1,4 +1,4 @@
-FROM node:lts-alpine3.24 AS base
+FROM node:24-alpine3.24 AS base
 
 # The preview compiles LaTeX in this image (src/latex.ts). Only the collections the generated preamble
 # loads are installed; texlive-most is deliberately absent.
