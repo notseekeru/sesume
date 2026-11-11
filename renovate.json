@@ -17,7 +17,8 @@
         {
             "matchManagers": ["github-actions"],
             "groupName": "GitHub Actions dependencies",
-            "separateMajorMinor": false
+            "separateMajorMinor": false,
+            "pinDigests": true
         },
         {
             "matchManagers": ["npm"],
