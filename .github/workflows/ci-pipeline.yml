@@ -5,6 +5,19 @@ on:
     branches: [main]
   push:
     branches: [main]
+    paths:
+      - "frontend/**"
+      - "backend/**"
+      - ".github/workflows/**"
+      - ".trivyignore.yaml"
+      - ".gitleaksignore"
+      - "compose.yml"
+      - "compose.prod.yml"
+      - "compose.dev.yml"
+      - "renovate.json"
+      - "flake.nix"
+      - "flake.lock"
+      - "Makefile"
   workflow_dispatch:
   workflow_call:
 
