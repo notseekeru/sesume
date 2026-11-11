@@ -1,0 +1,8 @@
+vulnerabilities:
+  - id: CVE-2023-32700
+    statement: >-
+      libsynctex arrives with alpine's texlive, installed for pdflatex. src/latex.ts runs pdflatex with
+      -no-shell-escape and openin_any/openout_any set to paranoid, and never asks for synctex output,
+      so the vulnerable path is not reachable. Alpine's apk is newer than trivy's recorded fix
+      version, so no upgrade clears the finding.
+    expired_at: 2027-02-01
