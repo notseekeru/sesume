@@ -7,33 +7,3 @@ misconfigurations:
       writes only to /tmp. Setting a USER means chowning ${LAMBDA_TASK_ROOT} and the texlive tree, which
       no test here can confirm before the deploy replaces the live function.
     expired_at: 2027-02-01
-vulnerabilities:
-  - id: CVE-2026-86805
-    statement: >-
-      ld.so escalates privilege for AT_SECURE programs by racing $ORIGIN expansion while
-      fs.protected_hardlinks is off. /proc/sys/fs/protected_hardlinks reads 1, the image holds no
-      setuid or setgid binary to hijack, and the function already runs as root, so there is no
-      privilege to escalate from.
-    expired_at: 2027-02-01
-  - id: CVE-2026-103242
-    statement: >-
-      rpm's hex2binv overflow is reached by handing rpm2cpio, rpm2archive or rpm -qlvp a crafted
-      package. Nothing in the handler or the Lambda runtime opens an RPM file.
-    expired_at: 2027-02-01
-  - id: CVE-2026-84837
-    statement: >-
-      The command injection is in rpmbuild -t*, which parses the tarball name. rpmbuild is not
-      installed in the image.
-    expired_at: 2027-02-01
-  - id: CVE-2026-95519
-    statement: >-
-      Macro expansion in rpmgi manifest handling needs an rpm invocation on a crafted manifest.
-      rpmgi is not installed and the handler never shells out to rpm.
-    expired_at: 2027-02-01
-  - id: CVE-2023-32700
-    statement: >-
-      libsynctex arrives with alpine's texlive, installed for pdflatex. src/latex.ts runs pdflatex with
-      -no-shell-escape and openin_any/openout_any set to paranoid, and never asks for synctex output,
-      so the vulnerable path is not reachable. Alpine's apk is newer than trivy's recorded fix
-      version, so no upgrade clears the finding.
-    expired_at: 2027-02-01

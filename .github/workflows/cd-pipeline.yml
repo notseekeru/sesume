@@ -31,11 +31,13 @@ jobs:
           - name: backend
             dir: backend
             dockerfile: backend/Dockerfile
+            ignore: backend/.trivyignore.yaml
             platforms: linux/amd64,linux/arm64
             suffix: sesume_backend
             port: 4100
             health: /api/healthz
           - name: frontend
+            ignore: ""
             dir: frontend
             dockerfile: frontend/Dockerfile
             platforms: linux/amd64,linux/arm64
@@ -95,13 +97,20 @@ jobs:
 
       - name: Scan
         run: |
+          # Each image carries its own accepts; the root file answers the config scan.
+          MOUNT=""
+          IGNORE=""
+          if [ -n "${{ matrix.service.ignore }}" ]; then
+            MOUNT="-v $PWD/${{ matrix.service.ignore }}:/ignore.yaml"
+            IGNORE="--ignorefile /ignore.yaml"
+          fi
           docker run --rm \
             -v /var/run/docker.sock:/var/run/docker.sock \
-            -v "$PWD/.trivyignore.yaml:/.trivyignore.yaml" \
+            $MOUNT \
             aquasec/trivy:0.76.2 image \
             --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 \
             --skip-dirs usr/local --skip-dirs root/.cache \
-            --ignorefile /.trivyignore.yaml \
+            $IGNORE \
             "$IMAGE:$SHA"
 
       - name: SBOM
@@ -210,12 +219,12 @@ jobs:
           # var/lang and var/runtime are the runtime the Lambda base image ships, not this image's own dependencies.
           docker run --rm \
             -v /var/run/docker.sock:/var/run/docker.sock \
-            -v "$PWD/.trivyignore.yaml:/.trivyignore.yaml" \
+            -v "$PWD/backend/.trivyignore-lambda.yaml:/ignore.yaml" \
             aquasec/trivy:0.76.2 image \
             --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 \
             --skip-dirs usr/local --skip-dirs root/.cache \
             --skip-dirs var/lang --skip-dirs var/runtime \
-            --ignorefile /.trivyignore.yaml \
+            --ignorefile /ignore.yaml \
             "$IMAGE:$SHA"
 
       - name: SBOM
