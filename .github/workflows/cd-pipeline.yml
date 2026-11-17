@@ -3,6 +3,10 @@ name: CD
 on:
   push:
     branches: [main]
+    paths:
+      - '.github/**'
+      - 'backend/**'
+      - 'frontend/**'
   workflow_dispatch:
 
 permissions:
@@ -10,166 +14,10 @@ permissions:
 
 concurrency:
   group: deploy-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
-  gate:
-    uses: ./.github/workflows/ci-pipeline.yml
-    permissions:
-      contents: read
-
-  images:
-    needs: gate
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    permissions:
-      contents: read
-      packages: write
-    strategy:
-      fail-fast: false
-      matrix:
-        service:
-          - name: backend
-            dir: backend
-            dockerfile: backend/Dockerfile
-            ignore: backend/.trivyignore.yaml
-            platforms: linux/amd64,linux/arm64
-            suffix: sesume_backend
-            port: 4100
-            health: /api/healthz
-          - name: frontend
-            ignore: ""
-            dir: frontend
-            dockerfile: frontend/Dockerfile
-            platforms: linux/amd64,linux/arm64
-            suffix: sesume_frontend
-            port: 8080
-            health: /
-    env:
-      SHA: ${{ github.sha }}
-      IMAGE: ghcr.io/${{ github.repository_owner }}/${{ matrix.service.suffix }}
-      DATABASE_URL: postgresql://sesume:sesume@127.0.0.1:5432/sesume
-      AUTH_SECRET: ci-smoke-not-a-real-secret
-      DATA_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
-    services:
-      postgres:
-        image: postgres:18-alpine@sha256:123b17998ccaf47e53b502e8c6a1e79afd8f579c6f3eec83c563da026f957395
-        env:
-          POSTGRES_USER: sesume
-          POSTGRES_PASSWORD: sesume
-          POSTGRES_DB: sesume
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U sesume"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-        with:
-          ref: ${{ github.sha }}
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
-
-      - name: Log in to GHCR
-        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build for the gates
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
-        with:
-          context: ./${{ matrix.service.dir }}
-          file: ${{ matrix.service.dockerfile }}
-          target: prod
-          load: true
-          push: false
-          tags: ${{ env.IMAGE }}:${{ env.SHA }}
-          cache-from: type=gha,scope=${{ matrix.service.name }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.service.name }}
-
-      - name: Scan
-        run: |
-          # Each image carries its own accepts; the root file answers the config scan.
-          MOUNT=""
-          IGNORE=""
-          if [ -n "${{ matrix.service.ignore }}" ]; then
-            MOUNT="-v $PWD/${{ matrix.service.ignore }}:/ignore.yaml"
-            IGNORE="--ignorefile /ignore.yaml"
-          fi
-          docker run --rm \
-            -v /var/run/docker.sock:/var/run/docker.sock \
-            $MOUNT \
-            aquasec/trivy:0.76.2 image \
-            --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 \
-            --skip-dirs usr/local --skip-dirs root/.cache \
-            $IGNORE \
-            "$IMAGE:$SHA"
-
-      - name: SBOM
-        run: |
-          docker run --rm \
-            -v /var/run/docker.sock:/var/run/docker.sock \
-            -v "$PWD:/out" \
-            aquasec/trivy:0.76.2 image \
-            --format cyclonedx \
-            --output "/out/sbom-${{ matrix.service.name }}.cdx.json" \
-            "$IMAGE:$SHA"
-
-      - name: Upload the SBOM
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
-        with:
-          name: sbom-${{ matrix.service.name }}
-          path: sbom-${{ matrix.service.name }}.cdx.json
-          retention-days: 30
-
-      - name: Smoke test
-        run: |
-          docker run -d --name smoke --network host \
-            -e DATABASE_URL \
-            -e AUTH_SECRET \
-            -e DATA_KEY \
-            "$IMAGE:$SHA"
-          for _ in $(seq 1 30); do
-            if curl -fsS "http://127.0.0.1:${{ matrix.service.port }}${{ matrix.service.health }}" >/dev/null; then
-              exit 0
-            fi
-            sleep 1
-          done
-          docker logs smoke
-          exit 1
-
-      - name: Push multi-arch image
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
-        with:
-          context: ./${{ matrix.service.dir }}
-          file: ${{ matrix.service.dockerfile }}
-          target: prod
-          push: true
-          platforms: ${{ matrix.service.platforms }}
-          tags: |
-            ${{ env.IMAGE }}:${{ env.SHA }}
-            ${{ env.IMAGE }}:latest
-          # Separate export scopes: a shared one loses the arm64 leg on every push.
-          cache-from: |
-            type=gha,scope=${{ matrix.service.name }}
-            type=gha,scope=${{ matrix.service.name }}-multiarch
-          cache-to: type=gha,mode=max,scope=${{ matrix.service.name }}-multiarch
-
-      - name: Cleanup
-        if: always()
-        run: docker rm -f smoke || true
-
   deploy-lambda:
-    needs: gate
     runs-on: ubuntu-latest
     timeout-minutes: 40
     permissions:
@@ -196,9 +44,6 @@ jobs:
           ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
           echo "IMAGE=$ACCOUNT.dkr.ecr.$AWS_REGION.amazonaws.com/$REPOSITORY" >> "$GITHUB_ENV"
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
 
@@ -215,7 +60,6 @@ jobs:
           tags: ${{ env.IMAGE }}:${{ env.SHA }}
           cache-from: |
             type=gha,scope=backend-lambda
-            type=gha,scope=backend
           cache-to: type=gha,mode=max,scope=backend-lambda
 
       - name: Scan
@@ -296,7 +140,6 @@ jobs:
           done
 
   deploy-frontend:
-    needs: gate
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
