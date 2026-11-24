@@ -1,4 +1,4 @@
-FROM node:24-bookworm-slim@sha256:01d566e8d94d8c619591d78652babfccd3c6992a3dffa9ed5ab39e11cf6c70e9 AS build
+FROM node:26-bookworm-slim@sha256:0042e17d232a87a2cd485be1da7900fca4d10a4ad11b29e9285da1d2e54798c9 AS build
 
 WORKDIR /app
 
@@ -10,7 +10,7 @@ COPY src ./src
 
 RUN npm run build && npm prune --omit=dev
 
-FROM public.ecr.aws/lambda/nodejs:24@sha256:80215a499a6ea4a9d3409cdb04fa4f80b43a9334a786e57a457f70c47cb0b791 AS prod
+FROM public.ecr.aws/lambda/nodejs:26@sha256:063db0841ddb3ea0f4596c9c66411c38136b96ca2a4b2e37da1818e3db07119d AS prod
 
 # The preview compiles LaTeX inside the function (src/latex.ts), and the Lambda base image is Amazon
 # Linux 2023, so the engine comes from the distribution rather than the Alpine set in Dockerfile.
