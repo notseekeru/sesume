@@ -41,6 +41,10 @@
     --mark-weak: rgba(17, 17, 17, 0.06);
     --mark-strong: rgba(17, 17, 17, 0.12);
     --mark-touched: rgba(17, 17, 17, 0.08);
+
+    --accent: #00b368;
+    --logo-tile: var(--mark-bg);
+    --logo-dot: var(--accent);
 }
 
 :root[data-theme="dark"] {
@@ -63,6 +67,10 @@
     --mark-weak: rgba(242, 242, 242, 0.08);
     --mark-strong: rgba(242, 242, 242, 0.14);
     --mark-touched: rgba(242, 242, 242, 0.1);
+
+    --accent: #03fc90;
+    --logo-tile: var(--accent);
+    --logo-dot: var(--mark-fg);
 }
 
 * {
@@ -307,6 +315,7 @@ h3 {
     padding: var(--s3) var(--s3);
     background: var(--card);
     border: 1px solid var(--line);
+    border-top: 2px solid var(--accent);
     border-radius: var(--r);
     overflow: hidden;
 }
@@ -331,11 +340,11 @@ h3 {
 }
 
 .logo-tile {
-    fill: var(--mark-bg);
+    fill: var(--logo-tile);
 }
 
 .logo-dot {
-    fill: var(--mark-fg);
+    fill: var(--logo-dot);
 }
 
 .brand-name {
