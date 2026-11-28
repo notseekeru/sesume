@@ -9,6 +9,5 @@ notes.md
 .env.local
 .playwright-mcp/
 
-/RESUME.latex
 /AGENTS.md
 !/AGENTS.md

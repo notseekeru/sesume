@@ -1,5 +1,5 @@
 {
-  description = "resume: one-page LaTeX resume and its layout gate";
+  description = "sesume: resume builder web shell and dev stack";
 
   inputs.nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
 
@@ -20,15 +20,6 @@
         {
           default = pkgs.mkShell {
             packages = [
-              (pkgs.texliveSmall.withPackages (
-                ps: with ps; [
-                  latexmk
-                  titlesec
-                  enumitem
-                  charter
-                ]
-              ))
-              pkgs.poppler-utils
               pkgs.nodejs_24
               pkgs.playwright-mcp
             ];
